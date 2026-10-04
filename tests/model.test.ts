@@ -120,3 +120,22 @@ describe("buildModel", () => {
     expect(m.cacheable).toBe(true);
   });
 });
+
+describe("buildModel fetch times", () => {
+  it("reports each upstream's own last fetch time", () => {
+    const m = buildModel(snap(1_000, 2_000), NOW);
+    expect(m.fetchedAt).toEqual({ marine: 1_000, forecast: 2_000 });
+  });
+
+  it("includes the tide time once tides have loaded", () => {
+    expect(buildModel(snap(1_000, 2_000, 3_000), NOW).fetchedAt).toEqual({
+      marine: 1_000,
+      forecast: 2_000,
+      tides: 3_000,
+    });
+  });
+
+  it("is empty before anything has loaded", () => {
+    expect(buildModel(snap(), NOW).fetchedAt).toEqual({});
+  });
+});

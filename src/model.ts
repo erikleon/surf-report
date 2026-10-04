@@ -27,6 +27,8 @@ export interface SiteModel {
   marineState: AgeState;
   forecastState: AgeState;
   tideState: AgeState;
+  /** Epoch ms of each upstream's last good fetch, for the About page. */
+  fetchedAt: { marine?: number; forecast?: number; tides?: number };
   /** True only for a complete, fresh page that the edge may keep. */
   cacheable: boolean;
 }
@@ -59,6 +61,7 @@ export function buildModel(snapshot: CacheSnapshot, nowMs: number): SiteModel {
     marineState: ageState(marine.fetchedAt, nowMs, RAW_STALE_AFTER_MS),
     forecastState: ageState(forecast.fetchedAt, nowMs, RAW_STALE_AFTER_MS),
     tideState: ageState(tides.fetchedAt, nowMs, TIDE_STALE_AFTER_MS),
+    fetchedAt: {},
     cacheable:
       callState === "ok" &&
       marine.value !== undefined &&
@@ -69,5 +72,8 @@ export function buildModel(snapshot: CacheSnapshot, nowMs: number): SiteModel {
   if (tides.value !== undefined) model.tide = tides.value;
   if (verdict !== undefined) model.verdict = verdict;
   if (callAsOf !== undefined) model.callAsOf = callAsOf;
+  if (marine.fetchedAt !== undefined) model.fetchedAt.marine = marine.fetchedAt;
+  if (forecast.fetchedAt !== undefined) model.fetchedAt.forecast = forecast.fetchedAt;
+  if (tides.fetchedAt !== undefined) model.fetchedAt.tides = tides.fetchedAt;
   return model;
 }
