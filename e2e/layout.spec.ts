@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { settle } from "./helpers";
 
-for (const path of ["/", "/week", "/about"]) {
+for (const path of ["/", "/week", "/map", "/about"]) {
   test(`${path} has no horizontal scroll`, async ({ page }) => {
     await page.goto(path);
     await settle(page);

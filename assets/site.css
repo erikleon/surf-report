@@ -860,6 +860,23 @@ p.empty {
 }
 
 @media (max-width: 479px) {
+  /* Four nav links do not fit beside the site name on a small phone, so the
+     nav takes its own row under the place line. The negative margin lines the
+     first link's text up with the page edge while keeping its tap area. */
+  .site-head {
+    grid-template-columns: 1fr;
+  }
+
+  .site-head nav {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .nav {
+    gap: 0;
+    margin-inline-start: calc(-1 * var(--s-sm));
+  }
+
   .dayrow {
     grid-template-columns: 1fr auto;
   }
