@@ -98,8 +98,8 @@ function windNow(model: SiteModel): string {
     `<p class="wind-now${staleAt !== undefined ? " stale" : ""}">${line}` +
     (staleAt !== undefined ? staleAsOf(staleAt) : "") +
     `</p>` +
-    `<p class="plain">The moving wind field on the map needs JavaScript. ` +
-    `It draws the same forecast, one hour at a time.</p></section>`
+    `<p class="plain">On the interactive map, the moving lines are the wind forecast over the water, ` +
+    `one hour at a time. Without JavaScript the map is a still picture with no wind.</p></section>`
   );
 }
 

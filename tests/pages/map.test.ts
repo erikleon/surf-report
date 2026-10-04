@@ -146,7 +146,9 @@ describe("wind on the map page", () => {
     const wind = html.split('id="h-wind"')[1]?.split("</section>")[0] ?? "";
     expect(wind).toMatch(/Now: <span class="num">\d+<\/span> mph from the [NESW]{1,3}, <span class="v-(off|on|cross)">(offshore|onshore|cross shore)<\/span>\./);
     expect(wind).not.toContain("stale");
-    expect(wind).toContain("needs JavaScript");
+    // True with JavaScript on and off: it describes both.
+    expect(wind).toContain("the moving lines are the wind forecast over the water");
+    expect(wind).toContain("Without JavaScript the map is a still picture");
   });
 
   it("marks old wind with the amber rule and the as-of time", () => {
