@@ -15,6 +15,8 @@ export interface StartOptions {
   env: Record<string, string | undefined>;
   /** Folder holding site.css, scrub.js and fonts/. */
   assetsDir: string;
+  /** Folder holding the map GeoJSON files. Defaults to `../data/map` beside `assetsDir`. */
+  mapDataDir?: string;
   /** Epoch milliseconds. */
   now?: () => number;
   fetchImpl?: FetchFn;
@@ -37,7 +39,8 @@ export async function startServer(opts: StartOptions): Promise<Running> {
   const log = opts.log ?? ((line: string) => void process.stderr.write(`${line}\n`));
   const now = opts.now ?? Date.now;
   const config = loadConfig(opts.env);
-  const assets = loadAssets(opts.assetsDir);
+  // A missing map file turns the map off with one log line; a missing core file stops the start.
+  const assets = loadAssets(opts.assetsDir, { log, ...(opts.mapDataDir ? { mapDataDir: opts.mapDataDir } : {}) });
 
   const cache = createCache({ now, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
   attachVerdictLog(cache, createVerdictLog({ dir: config.verdictLogDir, now, log }), log);
