@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { brotliCompressSync, gzipSync } from "node:zlib";
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from "node:zlib";
 import type { MapAssets, PageAssets } from "./pages/index.js";
 
 export interface Asset {
@@ -71,8 +71,19 @@ function hashOfFiles(files: ReadonlyArray<readonly [string, Buffer]>): string {
   return hash.digest("hex").slice(0, 8);
 }
 
+/**
+ * Above this size brotli drops from quality 11 to 10. On the MapLibre bundles
+ * and the styles, 11 takes about a second longer at start for under 2% fewer bytes.
+ */
+const BROTLI_MAX_QUALITY_BYTES = 256 * 1024;
+
 function compressed(body: Buffer, compress: boolean): Record<string, Buffer> {
-  return compress ? { br: brotliCompressSync(body), gzip: gzipSync(body, { level: 9 }) } : {};
+  if (!compress) return {};
+  const quality = body.length > BROTLI_MAX_QUALITY_BYTES ? 10 : 11;
+  return {
+    br: brotliCompressSync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: quality } }),
+    gzip: gzipSync(body, { level: 9 }),
+  };
 }
 
 interface MapGroup {
