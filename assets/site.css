@@ -1150,6 +1150,19 @@ p.empty {
   color: var(--ink);
 }
 
+/* MapLibre's zoom buttons as a hairline-bordered group in the page colours.
+   Its own ring shadow is switched off: the design draws rules, not shadows. */
+.map .maplibregl-ctrl-group:not(:empty) {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  box-shadow: none;
+}
+
+.map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--rule);
+}
+
 /* An <img> never follows the page's dark mode, so the static map, drawn in
    light colours, sits on a light paper panel. */
 @media (prefers-color-scheme: dark) {
@@ -1159,7 +1172,8 @@ p.empty {
     border-radius: var(--r-md);
   }
 
-  .map .maplibregl-ctrl-attrib-button {
+  .map .maplibregl-ctrl-attrib-button,
+  .map .maplibregl-ctrl-icon {
     filter: invert(1);
   }
 }

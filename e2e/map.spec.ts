@@ -72,4 +72,19 @@ test.describe("map page", () => {
     expect(res.status()).toBe(206);
     expect((await res.body()).length).toBe(127);
   });
+
+  test.describe("dark mode", () => {
+    test.use({ colorScheme: "dark" });
+    test("draws the zoom buttons in the page colours, not white", async ({ page }) => {
+      await page.goto("/map");
+      await page.locator(".map.map-ready").waitFor(READY);
+      const colours = await page.evaluate(() => ({
+        group: getComputedStyle(document.querySelector(".maplibregl-ctrl-group") as Element).backgroundColor,
+        body: getComputedStyle(document.body).backgroundColor,
+        shadow: getComputedStyle(document.querySelector(".maplibregl-ctrl-group") as Element).boxShadow,
+      }));
+      expect(colours.group).toBe(colours.body);
+      expect(colours.shadow).toBe("none");
+    });
+  });
 });

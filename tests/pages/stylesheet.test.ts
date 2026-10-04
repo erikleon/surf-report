@@ -23,7 +23,9 @@ describe("assets/site.css", () => {
   });
 
   it("uses none of the banned decorations", () => {
-    expect(css).not.toContain("box-shadow");
+    // The only shadow allowed is switching one off, as for MapLibre's controls.
+    const shadows = [...css.matchAll(/box-shadow:\s*([^;}]+)/g)].map((m) => (m[1] ?? "").trim());
+    expect(shadows.every((v) => v === "none")).toBe(true);
     expect(css).not.toContain("gradient(");
     expect(css).not.toContain("border-left");
   });
