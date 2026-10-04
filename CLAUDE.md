@@ -13,6 +13,7 @@ npm run typecheck     # tsc --noEmit
 npm run build         # tsc to dist/
 npm start             # node dist/index.js
 npm run contract      # check the live upstreams; makes real network requests
+docker build -t surf-report:test .   # build the container image locally
 ```
 
 Run a single test file with `npx vitest run tests/<name>.test.ts`, or one test by name with `-t "<part of the name>"`.

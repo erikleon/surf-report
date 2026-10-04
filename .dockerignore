@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.github
+.claude
+tests
+qa-reports
+coverage
+# Nothing in the image is read from the Markdown files.
+*.md
+.env
+.env.*
