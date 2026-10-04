@@ -1,0 +1,1009 @@
+/*
+ * Rockaway surf report. See DESIGN.md for the rules this file implements.
+ *
+ * Contrast, WCAG ratios (4.5 needed for text), computed from the tokens below.
+ * Light: ink on paper 14.03, ink on foam 12.76, muted on paper 5.67, muted on
+ * foam 5.36, sea on paper 6.09, sea on foam 5.54, good on paper 5.14, good on
+ * foam 4.67, poor on paper 5.39, poor on foam 4.90.
+ * Dark: ink on paper 14.17, ink on foam 12.28, muted on paper 7.43, muted on
+ * foam 6.72, sea on paper 6.76, sea on foam 5.86, good on paper 7.01, good on
+ * foam 6.07, poor on paper 6.22, poor on foam 5.39.
+ * Amber is never text: it only paints the stale rule and the stale square.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --paper: #f2eee4;
+  --ink: #0f2230;
+  --sea: #1f5f7a;
+  --foam: #dce6e4;
+  --good: #287052;
+  --poor: #a63d40;
+  --stale: #c98a12;
+  /* Ink at 70% on paper, solid so it also holds on foam. */
+  --muted: #535f66;
+  /* Hairline rules and chart gridlines: ink at low opacity. */
+  --rule: rgba(15, 34, 48, 0.22);
+  /* Marginal is ink at 40%, not a colour. */
+  --marg: rgba(15, 34, 48, 0.4);
+  --nodata: rgba(15, 34, 48, 0.1);
+  --night: rgba(15, 34, 48, 0.07);
+  --sea-faded: rgba(31, 95, 122, 0.3);
+
+  --font-body: "Geist", "Geist Fallback", system-ui, sans-serif;
+  --font-display: "Instrument Serif", "Instrument Serif Fallback", "Times New Roman", serif;
+
+  /* Spacing, base 4px: 2xs 2, xs 4, sm 8, md 16, lg 24, xl 32, 2xl 48, 3xl 64. */
+  --s-2xs: 2px;
+  --s-xs: 4px;
+  --s-sm: 8px;
+  --s-md: 16px;
+  --s-lg: 24px;
+  --s-xl: 32px;
+  --s-2xl: 48px;
+  --s-3xl: 64px;
+
+  --r-sm: 2px;
+  --r-md: 4px;
+  --tap: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0b1820;
+    --ink: #e8e4d8;
+    --sea: #5fa8c4;
+    --foam: #122630;
+    --good: #52b38a;
+    --poor: #e07a7d;
+    --stale: #c98a12;
+    --muted: #a6a7a1;
+    --rule: rgba(232, 228, 216, 0.22);
+    --marg: rgba(232, 228, 216, 0.4);
+    --nodata: rgba(232, 228, 216, 0.12);
+    --night: rgba(232, 228, 216, 0.06);
+    --sea-faded: rgba(95, 168, 196, 0.3);
+  }
+}
+
+/* ---- Fonts ---- */
+
+@font-face {
+  font-family: "Geist";
+  src: url(__FONT_GEIST__) format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url(__FONT_SERIF__) format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Fallback faces sized to match the web fonts, so the swap does not move the
+ * layout. Numbers come from the fonts' own tables (unitsPerEm 1000 for both)
+ * and the system fonts' tables:
+ *
+ *   size-adjust = average advance of a sample sentence in the web font divided
+ *                 by the same in the system font. The sample is the pangram,
+ *                 the digits and "Rockaway".
+ *     Geist 0.5051 em / Arial 0.4791 em             = 105.42%
+ *     Instrument Serif 0.3603 em / Times New Roman 0.4391 em = 82.07%
+ *   ascent-override  = hhea ascent / size-adjust
+ *     Geist 1.005 / 1.0542                          = 95.33%
+ *     Instrument Serif 0.990 / 0.8207               = 120.63%
+ *   descent-override = hhea descent / size-adjust
+ *     Geist 0.295 / 1.0542                          = 27.98%
+ *     Instrument Serif 0.310 / 0.8207               = 37.77%
+ *   line-gap-override = hhea lineGap, which is 0 for both fonts.
+ *
+ * Liberation Sans and Liberation Serif share Arial's and Times New Roman's
+ * metrics, so they stand in on systems without the originals.
+ */
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial"), local("Liberation Sans");
+  size-adjust: 105.42%;
+  ascent-override: 95.33%;
+  descent-override: 27.98%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Instrument Serif Fallback";
+  src: local("Times New Roman"), local("Liberation Serif");
+  size-adjust: 82.07%;
+  ascent-override: 120.63%;
+  descent-override: 37.77%;
+  line-gap-override: 0%;
+}
+
+/* ---- Base ---- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+p,
+ul,
+ol,
+dl,
+dd {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: var(--sea);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 100ms ease-out;
+}
+
+a:hover {
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--sea);
+  outline-offset: 2px;
+}
+
+.wrap {
+  max-width: 1040px;
+  margin-inline: auto;
+  padding-inline: var(--s-md);
+}
+
+/* Visually hidden text that stays in the accessibility tree. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip {
+  position: absolute;
+  left: var(--s-md);
+  top: -100px;
+  padding: var(--s-sm) var(--s-md);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: var(--r-sm);
+  z-index: 10;
+}
+
+.skip:focus {
+  top: var(--s-sm);
+}
+
+/* Numbers in every data cell line up. */
+.num,
+.stars,
+.asof,
+dd,
+td,
+th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Header, nav, footer ---- */
+
+.site-head {
+  padding-top: var(--s-md);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  column-gap: var(--s-md);
+  border-bottom: 1px solid var(--rule);
+}
+
+.site {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.site a {
+  color: var(--ink);
+  text-decoration: none;
+  display: inline-block;
+  min-height: var(--tap);
+  padding-top: var(--s-xs);
+}
+
+.place {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 12px;
+  color: var(--muted);
+  padding-bottom: var(--s-sm);
+}
+
+.site-head nav {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: end;
+}
+
+.nav {
+  display: flex;
+  gap: var(--s-xs);
+}
+
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding-inline: var(--s-sm);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.nav a:hover {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.nav a[aria-current="page"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+
+main {
+  display: block;
+  padding-block: var(--s-lg) var(--s-2xl);
+}
+
+.site-foot {
+  border-top: 1px solid var(--rule);
+  padding-block: var(--s-md) var(--s-xl);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.site-foot p + p {
+  margin-top: var(--s-sm);
+}
+
+.site-foot a {
+  color: var(--ink);
+}
+
+/* ---- Section labels and plain text ---- */
+
+.label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-top: var(--s-lg);
+  padding-bottom: var(--s-xs);
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.lede,
+.plain {
+  margin-top: var(--s-sm);
+  max-width: 60ch;
+}
+
+.more {
+  margin-top: var(--s-lg);
+  border-top: 1px solid var(--rule);
+  padding-top: var(--s-xs);
+}
+
+.more a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.prose {
+  max-width: 64ch;
+}
+
+.prose p,
+.prose ul {
+  margin-top: var(--s-sm);
+}
+
+.prose ul {
+  list-style: disc;
+  padding-inline-start: var(--s-lg);
+}
+
+.prose li + li {
+  margin-top: var(--s-xs);
+}
+
+/* ---- Stale marking: ink text, amber rule above, amber square beside the time ---- */
+
+.stale {
+  border-top: 3px solid var(--stale);
+  padding-top: var(--s-sm);
+}
+
+.stale-sq {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--s-xs);
+  background: var(--stale);
+  border-radius: var(--r-sm);
+  vertical-align: baseline;
+}
+
+.asof {
+  display: block;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.stale-note {
+  margin-top: var(--s-sm);
+  font-size: 14px;
+}
+
+/* ---- The call ---- */
+
+.call {
+  padding-bottom: var(--s-md);
+}
+
+.call-day {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.call-word {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 40px;
+  line-height: 1.05;
+}
+
+.call-none {
+  font-size: 28px;
+}
+
+.call-asof {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: var(--s-2xs);
+}
+
+.call-stars {
+  margin-top: var(--s-sm);
+}
+
+.call-why {
+  margin-top: var(--s-sm);
+  font-size: 16px;
+}
+
+.stale .call-why {
+  margin-top: var(--s-xs);
+}
+
+/* ---- Stars ---- */
+
+.stars {
+  display: inline-flex;
+  gap: var(--s-2xs);
+  vertical-align: middle;
+}
+
+.star {
+  width: 16px;
+  height: 16px;
+}
+
+.star.solid path {
+  fill: var(--sea);
+}
+
+.star.faded path {
+  fill: var(--sea-faded);
+}
+
+.star.empty path {
+  fill: none;
+  stroke: var(--marg);
+  stroke-width: 0.8;
+}
+
+/* ---- Hour cells ---- */
+
+.cells {
+  display: flex;
+  gap: var(--s-2xs);
+  margin-top: var(--s-md);
+  padding-bottom: var(--s-lg);
+}
+
+.cell {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 40px;
+}
+
+.cell-fill {
+  display: block;
+  height: 24px;
+  border-radius: var(--r-sm);
+}
+
+.cell.good .cell-fill {
+  background: var(--good);
+}
+
+.cell.marg .cell-fill {
+  background: var(--marg);
+}
+
+.cell.poor .cell-fill {
+  background: var(--poor);
+}
+
+.cell.nodata .cell-fill {
+  background: var(--nodata);
+  border: 1px dashed var(--rule);
+}
+
+.cell-label {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* ---- Now strip ---- */
+
+.now {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  /* The 1px gap shows the rule colour between the columns. */
+  gap: 1px;
+  background: var(--rule);
+  border-block: 1px solid var(--rule);
+}
+
+.now-col {
+  background: var(--paper);
+  padding: var(--s-sm) var(--s-sm) var(--s-sm) var(--s-sm);
+  min-width: 0;
+}
+
+.now-col:first-child {
+  padding-inline-start: 0;
+}
+
+.now-col dt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.now-col .num {
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.now-col .unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.now-col .sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.now-col .none {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.now-col.stale {
+  border-top: 3px solid var(--stale);
+}
+
+.now-col .asof {
+  margin-top: var(--s-xs);
+}
+
+/* Wind classes: green offshore, red onshore, plain for cross shore. */
+.v-off,
+.v-good {
+  color: var(--good);
+}
+
+.v-on,
+.v-poor {
+  color: var(--poor);
+}
+
+.v-cross,
+.v-marg {
+  color: var(--ink);
+}
+
+.v-nodata {
+  color: var(--muted);
+}
+
+/* ---- Timeline: readout, chart, scrubber ---- */
+
+.timeline {
+  position: relative;
+}
+
+.readout {
+  min-height: 120px;
+  padding-block: var(--s-sm);
+}
+
+.ro-frame {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--s-lg);
+  row-gap: var(--s-xs);
+  align-items: baseline;
+}
+
+.ro-frame[hidden] {
+  display: none;
+}
+
+.ro-when,
+.ro-cell,
+.ro-verdict {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ro-k {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ro-v {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ro-why {
+  flex-basis: 100%;
+  font-size: 14px;
+}
+
+.nowbtn {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 var(--s-sm);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  color: var(--sea);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 100ms ease-out;
+}
+
+.nowbtn:hover {
+  color: var(--ink);
+}
+
+.chartwrap {
+  background: var(--foam);
+  border-radius: var(--r-sm);
+  /* A swipe on the chart scrolls the page. The script moves the readout only
+     for real horizontal movement. */
+  touch-action: pan-y;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-body);
+}
+
+.empty {
+  padding: var(--s-md);
+  background: var(--foam);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+}
+
+/* The range input is the keyboard and screen reader path to the timeline. It
+   is invisible and sits over the chart without catching pointer events. When
+   it has focus the chart gets the focus outline instead. */
+.scrubber {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: var(--tap);
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.scrubber:focus-visible {
+  outline: 2px solid var(--sea);
+  outline-offset: 2px;
+}
+
+.timeline:has(.scrubber:focus-visible) .chartwrap {
+  outline: 2px solid var(--sea);
+  outline-offset: 2px;
+}
+
+/* Chart parts. The SVG's user units scale with the width, so the text sizes
+   below are larger on a phone to stay readable. */
+.chart text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.chart .night {
+  fill: var(--night);
+}
+
+.chart .nodata {
+  fill: var(--nodata);
+}
+
+.chart .grid {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.chart .day {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.chart .daylabel {
+  fill: var(--ink);
+  font-weight: 500;
+}
+
+.chart .wavearea {
+  fill: var(--sea);
+  fill-opacity: 0.28;
+  stroke: var(--sea);
+  stroke-width: 1.5;
+}
+
+.chart .periodline {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+.chart .bridge {
+  stroke-width: 1.5;
+  stroke-dasharray: 2 4;
+}
+
+.chart .wavebridge {
+  stroke: var(--sea);
+}
+
+.chart .periodbridge {
+  stroke: var(--ink);
+}
+
+.chart .vb-good {
+  fill: var(--good);
+}
+
+.chart .vb-marg {
+  fill: var(--marg);
+}
+
+.chart .vb-poor {
+  fill: var(--poor);
+}
+
+.chart .vb-nodata {
+  fill: var(--nodata);
+}
+
+.chart .wind.off {
+  fill: var(--good);
+}
+
+.chart .wind.on {
+  fill: var(--poor);
+}
+
+.chart .wind.cross {
+  fill: var(--muted);
+}
+
+.chart .head line {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.chart .head circle {
+  fill: var(--ink);
+}
+
+/* With the call hidden, the chart keeps its raw numbers but drops the band. */
+.nocall .chart .vb-good,
+.nocall .chart .vb-marg,
+.nocall .chart .vb-poor,
+.nocall .chart .vb-nodata,
+.nocall .chart .bandlabel {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .chart text {
+    font-size: 20px;
+  }
+}
+
+/* ---- Next three days ---- */
+
+.days {
+  border-top: 1px solid var(--rule);
+}
+
+.days li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.dayrow {
+  display: grid;
+  grid-template-columns: 5.5em 1fr auto;
+  align-items: center;
+  column-gap: var(--s-sm);
+  min-height: var(--tap);
+  padding-block: var(--s-sm);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.d-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--sea);
+}
+
+.dayrow:hover .d-name {
+  color: var(--ink);
+}
+
+.d-call {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-xs) var(--s-sm);
+  min-width: 0;
+}
+
+.d-wave {
+  font-size: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 479px) {
+  .dayrow {
+    grid-template-columns: 1fr auto;
+  }
+
+  .d-call {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+/* ---- Week ---- */
+
+.week-days {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s-lg);
+  margin-top: var(--s-md);
+}
+
+.day {
+  min-width: 0;
+  padding: var(--s-sm) var(--s-sm) var(--s-md);
+}
+
+.day:nth-child(even) {
+  background: var(--foam);
+}
+
+.day h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.15;
+  padding-block: var(--s-xs) var(--s-sm);
+}
+
+.day h2 .date {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.week {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.week th,
+.week td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--s-sm) var(--s-xs);
+  border-top: 1px solid var(--rule);
+  min-height: var(--tap);
+  overflow-wrap: anywhere;
+}
+
+.week thead th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border-top: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.week tbody th {
+  font-weight: 500;
+  width: 22%;
+}
+
+.week .sub,
+.week .why,
+.week .tide-line {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.week .tide-line {
+  font-weight: 400;
+  margin-top: var(--s-xs);
+}
+
+.week .why {
+  margin-top: var(--s-2xs);
+}
+
+.week .stars .star {
+  width: 12px;
+  height: 12px;
+}
+
+.week .c-rating {
+  width: 33%;
+}
+
+.arrow {
+  width: 12px;
+  height: 14px;
+  vertical-align: middle;
+}
+
+.arrow .wind.off {
+  fill: var(--good);
+}
+
+.arrow .wind.on {
+  fill: var(--poor);
+}
+
+.arrow .wind.cross {
+  fill: var(--muted);
+}
+
+.gap-row td {
+  color: var(--muted);
+}
+
+@media (min-width: 640px) {
+  .week-days {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .week-days {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .call-word {
+    font-size: 28px;
+  }
+}
+
+/* ---- Motion ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
