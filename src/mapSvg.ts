@@ -70,7 +70,9 @@ export interface NearshoreInput {
 // ---- Layout constants ----
 
 /**
- * The ocean side of the peninsula from Fort Tilden to about Beach 35th Street. The
+ * The ocean side of the peninsula from the tip of Breezy Point, where the last
+ * jetty sits about 8.1 km west of the origin along the beach, to about Beach
+ * 35th Street. The
  * shore runs about 17 degrees north of east, so the map is turned 17 degrees
  * clockwise to lay the beach flat with the ocean below it. The origin sits on
  * the beach line near Beach 133rd Street.
@@ -79,10 +81,10 @@ export const NEARSHORE_FRAME: Frame = {
   lon: -73.85,
   lat: 40.572,
   rotateDeg: 17,
-  leftM: 4600,
+  leftM: 8500,
   rightM: 7200,
-  upM: 700,
-  downM: 2300,
+  upM: 1000,
+  downM: 2000,
 };
 
 /** Width of the drawing in viewBox units. The height follows from the frame. */
@@ -102,6 +104,7 @@ const ON_BEACH_M = 100;
 
 /** Named places west of the streets, where there are no street ends to label. */
 const PLACES = [
+  { name: "Breezy Point", lon: -73.925, lat: 40.5585 },
   { name: "Fort Tilden", lon: -73.8895, lat: 40.5655 },
   { name: "Jacob Riis Park", lon: -73.8735, lat: 40.5695 },
 ] as const;

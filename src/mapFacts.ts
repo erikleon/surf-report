@@ -4,11 +4,10 @@ import type { NearshoreFacts } from "./mapSvg.js";
 
 export const MAP_FACTS: NearshoreFacts = {
   "width": 1000,
-  "height": 346.2,
-  "jetties": 51,
+  "height": 283.1,
+  "jetties": 52,
   "streetLabels": [
     116,
-    110,
     100,
     90,
     67,
@@ -65,9 +64,9 @@ export const MAP_FACTS: NearshoreFacts = {
     }
   ],
   "bounds": [
-    -73.9044,
-    40.5402,
-    -73.7606,
-    40.5969
+    -73.9496,
+    40.5325,
+    -73.7617,
+    40.5995
   ]
 };

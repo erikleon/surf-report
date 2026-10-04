@@ -281,3 +281,29 @@ describe("the committed map", () => {
     expect(facts.jetties).toBeGreaterThan(30);
   });
 });
+
+describe("the nearshore frame", () => {
+  it("reaches the tip of Breezy Point: the westernmost jetty in the data is inside the drawing", () => {
+    const shore = JSON.parse(readFileSync(join("data", "map", "shore.geojson"), "utf8")) as {
+      features: Array<{ properties: { kind: string }; geometry: { type: string; coordinates: number[][] } }>;
+    };
+    const jetties = shore.features.filter((f) => f.properties.kind === "jetty" && f.geometry.type === "LineString");
+    const tip = jetties
+      .flatMap((f) => f.geometry.coordinates)
+      .reduce((west, c) => ((c[0] as number) < (west[0] as number) ? c : west));
+    // The Breezy Point jetty sits at about 73.940 W.
+    expect(tip[0]).toBeLessThan(-73.93);
+    const p = projector(NEARSHORE_FRAME);
+    const [x, y] = p.xy(tip[0] as number, tip[1] as number);
+    expect(x).toBeGreaterThan(0);
+    expect(x).toBeLessThan(p.width);
+    expect(y).toBeGreaterThan(0);
+    expect(y).toBeLessThan(p.height);
+  });
+
+  it("names Breezy Point and still labels Beach 90th", () => {
+    const svg = readFileSync(join("assets", "map", "nearshore.svg"), "utf8");
+    expect(svg).toContain("Breezy Point");
+    expect(svg).toContain(">B90<");
+  });
+});
