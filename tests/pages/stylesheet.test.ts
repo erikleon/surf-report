@@ -84,6 +84,16 @@ describe("assets/site.css", () => {
     expect(css).toMatch(/^p\.empty\b/m);
   });
 
+  it("styles the map section and the classes the map client adds", () => {
+    for (const c of ["map", "map-canvas", "map-fallback", "map-ready", "wind-controls", "wind-hour", "wind-label", "wind-stale", "map-status"]) {
+      expect(css, c).toMatch(new RegExp(`\\.${c}\\b`));
+    }
+    expect(css).toMatch(/\.map\.map-ready \.map-fallback\s*{\s*display:\s*none/);
+    expect(css).toMatch(/\.map-canvas\s*{[^}]*aspect-ratio:[^}]*min-height:[^}]*visibility:\s*hidden/);
+    expect(css).toMatch(/\.map\.map-ready \.map-canvas\s*{\s*visibility:\s*visible/);
+    expect(css).toMatch(/\.wind-stale\s*{[^}]*border-top:\s*3px solid var\(--stale\)[^}]*color:\s*var\(--ink\)/);
+  });
+
   it("caps the content width at 1040px", () => {
     expect(css).toContain("max-width: 1040px");
   });
