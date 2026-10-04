@@ -673,7 +673,7 @@ main {
   font-family: var(--font-body);
 }
 
-.empty {
+p.empty {
   padding: var(--s-md);
   background: var(--foam);
   border-radius: var(--r-sm);

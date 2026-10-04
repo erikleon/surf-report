@@ -32,6 +32,26 @@ test("hour cells match the band under the chart, hour for hour", async ({ page }
   expect(band.slice(0, cells.length).map((b) => b.kind)).toEqual(cells);
 });
 
+test("every star icon is icon-sized, empty ones included", async ({ page }) => {
+  // The "ok" fixture day has a day with no stars at all, so empty stars appear.
+  for (const path of ["/", "/week"]) {
+    await page.goto(path);
+    await settle(page);
+    const sizes = await page.$$eval("svg.star", (els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { w: Math.round(r.width), h: Math.round(r.height), cls: el.getAttribute("class") ?? "" };
+      }),
+    );
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const s of sizes) {
+      expect(s.w, `${path} ${s.cls}`).toBeLessThanOrEqual(20);
+      expect(s.h, `${path} ${s.cls}`).toBeLessThanOrEqual(20);
+    }
+    expect(sizes.some((s) => s.cls.includes("empty"))).toBe(true);
+  }
+});
+
 test.describe("week page", () => {
   test("each day has a headed table and today starts at the current block", async ({ page }) => {
     await page.goto("/week");

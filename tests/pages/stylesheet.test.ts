@@ -77,6 +77,13 @@ describe("assets/site.css", () => {
     expect(css).toMatch(/touch-action:\s*pan-y/);
   });
 
+  it("scopes the chart's empty-message style to the paragraph, not the star icons", () => {
+    // An empty star is an svg with class "empty". A bare .empty rule gave it
+    // padding and a pale fill, which drew each one as a large blank box.
+    expect(css).not.toMatch(/^\.empty\b/m);
+    expect(css).toMatch(/^p\.empty\b/m);
+  });
+
   it("caps the content width at 1040px", () => {
     expect(css).toContain("max-width: 1040px");
   });
