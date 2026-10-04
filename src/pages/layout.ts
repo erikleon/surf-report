@@ -62,7 +62,7 @@ export function page(ctx: PageContext, spec: PageSpec): string {
     `<a class="skip" href="#main">Skip to content</a>` +
     `<header class="wrap site-head">` +
     `<p class="site"><a href="/">Rockaway</a></p>` +
-    `<p class="place">Beach 67th to Beach 116th, A train</p>` +
+    `<p class="place">Beach 67th to Beach 116th, A&nbsp;train</p>` +
     nav(spec.current) +
     `</header>` +
     `<main id="main" class="wrap">${spec.body}</main>` +
