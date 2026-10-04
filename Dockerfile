@@ -19,6 +19,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/assets ./assets
+# The map GeoJSON files. Without them the server starts with the map off.
+COPY data/map ./data/map
 
 # The verdict log lives here. A new named volume copies this ownership.
 RUN mkdir -p /data && chown node:node /data
