@@ -64,8 +64,8 @@ docker inspect --format '{{.State.Health.Status}}' surf-report
 For `surf.midwoodrathaus.fyi`:
 
 1. Add a DNS record that points at the host, with the proxy on (orange cloud).
-2. Add a Cache Rule for the host that caches HTML, with Edge TTL set to "Use cache-control header if present". The origin decides how long a page is cached.
-3. Turn Always Online off.
+2. Add a Cache Rule for the host that caches HTML: filter `(http.host eq "surf.midwoodrathaus.fyi")`, "Eligible for cache", Edge TTL "Use cache-control header if present, bypass cache if not", no Browser TTL setting, and "Serve stale content while revalidating" added with "Do not serve stale content while updating" turned on. The origin decides how long a page is cached, and a stale page is never served. This rule exists on the zone as "surf-report: cache HTML, respect origin headers" (deployed 2026-10-04).
+3. Turn Always Online off. (It is off on the zone.) Keep Rocket Loader off too: it rewrites script tags, which the Content-Security-Policy blocks. Email Address Obfuscation can stay on; it only injects a script into pages that contain an email address, and these do not.
 4. Do not add any rule that serves stale content when the origin fails. A stale forecast is worse than an error page.
 5. Range requests on `/assets/map/basemap.<hash>.pmtiles` must reach the browser as `206 Partial Content`. Cloudflare either passes the `Range` header to the origin or caches the whole file (5.4 MB, well under the cache size limit) and cuts the ranges itself; both work. Do not add a rule that strips `Range`, and do not let any feature change the file: no compression, Polish, minification or Rocket Loader on `.pmtiles`. The tiles inside are already gzip-compressed, and the reader's byte offsets point into the file exactly as the origin sends it.
 
