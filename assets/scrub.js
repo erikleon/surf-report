@@ -23,6 +23,26 @@
     var x1 = +svg.getAttribute("data-x1");
     if (!(x1 > x0) || !vbw) return;
 
+    // The spoken form of a frame, matching what the server writes for the first
+    // hour: the day and time, each cell as "key value", the verdict, the note.
+    // A label and its value sit in adjacent spans with no space between them,
+    // so textContent alone would run them together as "Surf3.4 ft".
+    function frameText(frame) {
+      var parts = [];
+      for (var a = 0; a < frame.children.length; a++) {
+        var el = frame.children[a];
+        if (el.classList.contains("nowbtn")) continue;
+        var bits = [];
+        for (var b = 0; b < el.children.length; b++) {
+          bits.push((el.children[b].textContent || "").trim());
+        }
+        var joiner = el.classList.contains("ro-when") ? ", " : " ";
+        var text = el.children.length ? bits.join(joiner) : (el.textContent || "").trim();
+        if (text) parts.push(text);
+      }
+      return parts.join(", ").replace(/\s+/g, " ").trim();
+    }
+
     function show(i) {
       i = i < 0 ? 0 : i > n - 1 ? n - 1 : i;
       if (i === cur) return;
@@ -30,10 +50,7 @@
       frames[i].hidden = false;
       cur = i;
       range.value = i;
-      range.setAttribute(
-        "aria-valuetext",
-        (frames[i].textContent || "").replace(/\s+/g, " ").trim()
-      );
+      range.setAttribute("aria-valuetext", frameText(frames[i]));
       if (head) {
         head.setAttribute(
           "transform",
