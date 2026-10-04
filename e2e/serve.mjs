@@ -2,7 +2,7 @@
 // real assets folder, a fake upstream that serves the saved fixtures, and a
 // clock the tests can move forward through a second small listener.
 //
-// Env: PORT, CONTROL_PORT, SCENARIO (ok, nulls, partial, down, hang).
+// Env: PORT, CONTROL_PORT, SCENARIO (ok, nulls, partial, down, hang, stale).
 
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -28,15 +28,24 @@ const now = () => BASE_MS + offsetMs;
 
 /** Which upstream a URL belongs to. */
 function upstreamOf(url) {
-  const host = new URL(url).hostname;
+  const parsed = new URL(url);
+  const host = parsed.hostname;
   if (host === "marine-api.open-meteo.com") return "marine";
+  // The wind grid is a forecast call with a comma-separated list of points.
+  if (host === "api.open-meteo.com" && (parsed.searchParams.get("latitude") ?? "").includes(",")) return "wind";
   if (host === "api.open-meteo.com") return "forecast";
   if (host === "api.tidesandcurrents.noaa.gov") return "tides";
   throw new Error(`no fixture for ${url}`);
 }
 
+// The wind fixture's hours run from 2026-10-04T00:00 New York time, a day
+// after the harness clock. Moving every stamp back one day makes the field
+// cover the clock, so the wind JSON has a current hour.
+const windgrid = fixture("windgrid.json").replaceAll("2026-10-04T", "2026-10-03T").replaceAll("2026-10-05T", "2026-10-04T");
+
 function respond(name, status = 200) {
-  return new Response(name === undefined ? "" : fixture(name), { status });
+  const body = name === undefined ? "" : name === "windgrid.json" ? windgrid : fixture(name);
+  return new Response(body, { status });
 }
 
 const fetchImpl = (input, init) => {
@@ -53,6 +62,7 @@ const fetchImpl = (input, init) => {
     marine: scenario === "nulls" ? "marine-nulls.json" : "marine.json",
     forecast: "forecast.json",
     tides: "tides.json",
+    wind: "windgrid.json",
   };
   return Promise.resolve(respond(files[which]));
 };
