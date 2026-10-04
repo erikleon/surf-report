@@ -39,16 +39,28 @@ export async function startServer(opts: StartOptions): Promise<Running> {
   const log = opts.log ?? ((line: string) => void process.stderr.write(`${line}\n`));
   const now = opts.now ?? Date.now;
   const config = loadConfig(opts.env);
-  // A missing map file turns the map off with one log line; a missing core file stops the start.
-  const assets = loadAssets(opts.assetsDir, { log, ...(opts.mapDataDir ? { mapDataDir: opts.mapDataDir } : {}) });
 
   const cache = createCache({ now, log, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) });
   attachVerdictLog(cache, createVerdictLog({ dir: config.verdictLogDir, now, log }), log);
 
+  // The first fetches start before the assets are read and compressed, so
+  // that CPU work overlaps the network wait instead of adding to it. With the
+  // map files it takes most of a second, and the health check allows about 12.
+  const started = cache.start();
+
+  // A missing map file turns the map off with one log line; a missing core file stops the start.
+  let assets: ReturnType<typeof loadAssets>;
+  try {
+    assets = loadAssets(opts.assetsDir, { log, ...(opts.mapDataDir ? { mapDataDir: opts.mapDataDir } : {}) });
+  } catch (err) {
+    cache.stop();
+    throw err;
+  }
+
   // The server does not listen until the first fetches finish or time out,
-  // so the first visitor does not get a loading page. Once this returns,
+  // so the first visitor does not get a loading page. Once this resolves,
   // the app is ready.
-  await cache.start();
+  await started;
 
   const server = createApp({ cache, assets, siteUrl: config.siteUrl, now, isReady: () => true, log });
   await new Promise<void>((resolveListen, rejectListen) => {
@@ -60,6 +72,7 @@ export async function startServer(opts: StartOptions): Promise<Running> {
   });
   const port = (server.address() as AddressInfo).port;
   log(`surf-report listening on ${config.host}:${port}`);
+
 
   return {
     server,

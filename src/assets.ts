@@ -72,17 +72,16 @@ function hashOfFiles(files: ReadonlyArray<readonly [string, Buffer]>): string {
 }
 
 /**
- * Above this size brotli drops from quality 11 to 10. On the MapLibre bundles
- * and the styles, 11 takes about a second longer at start for under 2% fewer bytes.
+ * Brotli quality 5 and gzip level 6. Over every text asset, map included, that
+ * takes about 150 ms at startup, where quality 10 to 11 blocked the process for
+ * several seconds on every start for about 15% fewer bytes. The hashed assets
+ * are cached at the edge for a year, so those bytes are paid rarely.
  */
-const BROTLI_MAX_QUALITY_BYTES = 256 * 1024;
-
 function compressed(body: Buffer, compress: boolean): Record<string, Buffer> {
   if (!compress) return {};
-  const quality = body.length > BROTLI_MAX_QUALITY_BYTES ? 10 : 11;
   return {
-    br: brotliCompressSync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: quality } }),
-    gzip: gzipSync(body, { level: 9 }),
+    br: brotliCompressSync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } }),
+    gzip: gzipSync(body, { level: 6 }),
   };
 }
 
