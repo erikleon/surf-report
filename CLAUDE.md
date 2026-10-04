@@ -12,6 +12,7 @@ npm run test:tz       # the suite under three host timezones; CI runs this
 npm run typecheck     # tsc --noEmit
 npm run build         # tsc to dist/
 npm start             # node dist/index.js
+npm run contract      # check the live upstreams; makes real network requests
 ```
 
 Run a single test file with `npx vitest run tests/<name>.test.ts`, or one test by name with `-t "<part of the name>"`.

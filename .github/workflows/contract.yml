@@ -1,0 +1,57 @@
+# Nightly check that the live upstreams (Open-Meteo marine and forecast, NOAA
+# tides) still answer in the shape our parsers expect. It makes real network
+# requests, so it is kept out of ci.yml: a slow upstream never blocks a merge.
+# On failure it opens one issue (if none is open) and the job still ends red.
+
+name: contract
+
+on:
+  schedule:
+    - cron: "15 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Check the live upstreams
+        # The default shell runs with pipefail, so the exit code of node
+        # survives the pipe into tee.
+        run: node dist/contract.js 2>&1 | tee contract-output.txt
+      - name: Open an issue when the check failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Upstream contract check failed"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json title --jq "[.[] | select(.title == \"$title\")] | length")
+          if [ "$open" != "0" ]; then
+            echo "An open issue already exists."
+            exit 0
+          fi
+          {
+            echo "The nightly check of the live upstreams failed."
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo '```'
+            cat contract-output.txt 2>/dev/null || echo "No output was captured. See the run log."
+            echo '```'
+          } > issue-body.md
+          # Issue creation fails if the label is missing. Creating a label that
+          # already exists fails too, which is the case to skip here.
+          if ! gh label list --json name --jq '.[].name' | grep -qx upstream; then
+            gh label create upstream --description "Live upstream API changes"
+          fi
+          gh issue create--title "$title" --label upstream --body-file issue-body.md
