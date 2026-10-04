@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "contract": "node dist/contract.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:tz": "TZ=America/New_York vitest run && TZ=UTC vitest run && TZ=Pacific/Auckland vitest run",
