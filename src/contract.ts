@@ -1,4 +1,4 @@
-// Nightly check that the three live upstreams still answer in the shape our
+// Nightly check that the four live upstreams still answer in the shape our
 // parsers expect. It makes real network requests, so it runs from its own
 // workflow and never from the normal test run.
 
@@ -8,10 +8,14 @@ import type { FetchFn } from "./types.js";
 import { fetchForecast } from "./upstream/forecast.js";
 import { fetchMarine } from "./upstream/marine.js";
 import { fetchTides } from "./upstream/tides.js";
+import { fetchWindGrid } from "./upstream/windGrid.js";
 import { nyStamp, tideDateRange } from "./time.js";
 
 const MIN_HOURS = 100;
 const MIN_DAYS = 5;
+/** The wind grid asks for two days; one full day is the floor for the map. */
+const MIN_WIND_HOURS = 24;
+const WIND_POINTS = 100;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface ContractFact {
@@ -20,7 +24,7 @@ export interface ContractFact {
 }
 
 export interface ContractLine {
-  upstream: "marine" | "forecast" | "tides";
+  upstream: "marine" | "forecast" | "tides" | "wind";
   /** True when the fetch and parse worked and every fact holds. */
   ok: boolean;
   /** Why the fetch or parse failed. Absent when it worked. */
@@ -51,10 +55,11 @@ export async function runContractCheck(
 ): Promise<ContractReport> {
   // Today plus six days, to match the seven-day forecast windows.
   const range = tideDateRange(nowMs, 6);
-  const [marine, forecast, tides] = await Promise.all([
+  const [marine, forecast, tides, wind] = await Promise.all([
     fetchMarine(fetchImpl),
     fetchForecast(fetchImpl),
     fetchTides(range, fetchImpl),
+    fetchWindGrid(fetchImpl),
   ]);
 
   // Stamps are New York wall time and compare as strings, so "within one day
@@ -95,6 +100,21 @@ export async function runContractCheck(
   } else {
     const count = tides.value.time.length;
     lines.push(withFacts("tides", [{ label: `${count} hourly rows (need ${MIN_HOURS}+)`, ok: count >= MIN_HOURS }]));
+  }
+
+  if (!wind.ok) {
+    lines.push(failed("wind", wind.reason));
+  } else {
+    // Hours with a missing value anywhere are already dropped, so this counts complete hours.
+    const count = wind.value.times.length;
+    const first = wind.value.speed[0] ?? [];
+    const points = first.reduce((sum, row) => sum + row.length, 0);
+    lines.push(
+      withFacts("wind", [
+        { label: `${count} complete hours (need ${MIN_WIND_HOURS}+)`, ok: count >= MIN_WIND_HOURS },
+        { label: `${points} grid points (need ${WIND_POINTS})`, ok: points === WIND_POINTS },
+      ]),
+    );
   }
 
   return { ok: lines.every((l) => l.ok), lines };

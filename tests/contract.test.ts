@@ -4,6 +4,7 @@ import { tideDateRange } from "../src/time.js";
 import { buildForecastUrl } from "../src/upstream/forecast.js";
 import { buildMarineUrl } from "../src/upstream/marine.js";
 import { buildTidesUrl } from "../src/upstream/tides.js";
+import { buildWindGridUrl } from "../src/upstream/windGrid.js";
 import { fakeFetch, type Canned } from "./upstream/fakeFetch.js";
 
 // The saved fixtures start at 2026-10-03T00:00 New York time.
@@ -16,18 +17,20 @@ function routes(overrides: Record<string, Canned> = {}): Record<string, Canned> 
     [buildMarineUrl()]: { file: "marine.json" },
     [buildForecastUrl()]: { file: "forecast.json" },
     [TIDES_URL]: { file: "tides.json" },
+    [buildWindGridUrl()]: { file: "windgrid.json" },
     ...overrides,
   };
 }
 
 describe("runContractCheck", () => {
-  it("passes when all three upstreams answer well", async () => {
+  it("passes when all four upstreams answer well", async () => {
     const report = await runContractCheck(fakeFetch(routes()), NOW);
     expect(report.ok).toBe(true);
     expect(report.lines.map((l) => [l.upstream, l.ok])).toEqual([
       ["marine", true],
       ["forecast", true],
       ["tides", true],
+      ["wind", true],
     ]);
     expect(formatReport(report).at(-1)).toBe("contract check passed");
   });
@@ -39,7 +42,7 @@ describe("runContractCheck", () => {
     const tides = report.lines.find((l) => l.upstream === "tides");
     expect(tides?.ok).toBe(false);
     expect(tides?.reason).toMatch(/^tides:/);
-    expect(report.lines.filter((l) => l.ok)).toHaveLength(2);
+    expect(report.lines.filter((l) => l.ok)).toHaveLength(3);
     expect(formatReport(report).join("\n")).toContain("tides: FAIL");
   });
 
@@ -78,5 +81,39 @@ describe("runContractCheck", () => {
     const marine = report.lines.find((l) => l.upstream === "marine");
     expect(marine?.ok).toBe(false);
     expect(marine?.facts.some((f) => !f.ok && f.label.includes("within one day"))).toBe(true);
+  });
+
+  it("checks the wind grid's hours and points", async () => {
+    const report = await runContractCheck(fakeFetch(routes()), NOW);
+    const wind = report.lines.find((l) => l.upstream === "wind");
+    expect(wind?.facts.map((f) => [f.label, f.ok])).toEqual([
+      ["48 complete hours (need 24+)", true],
+      ["100 grid points (need 100)", true],
+    ]);
+  });
+
+  it("fails when the wind grid has fewer than 24 complete hours", async () => {
+    const fetchImpl = fakeFetch(routes({ [buildWindGridUrl()]: { file: "windgrid-nulls.json" } }));
+    const report = await runContractCheck(fetchImpl, NOW);
+    expect(report.ok).toBe(false);
+    const wind = report.lines.find((l) => l.upstream === "wind");
+    expect(wind?.reason).toBeUndefined();
+    expect(wind?.facts.find((f) => f.label.includes("hours"))?.ok).toBe(false);
+    expect(formatReport(report).join("\n")).toContain("FAIL 2 complete hours (need 24+)");
+  });
+
+  it("fails and names the wind grid when it answers with an error body", async () => {
+    const fetchImpl = fakeFetch(routes({ [buildWindGridUrl()]: { file: "windgrid-error.json" } }));
+    const report = await runContractCheck(fetchImpl, NOW);
+    expect(report.ok).toBe(false);
+    expect(report.lines.map((l) => [l.upstream, l.ok])).toEqual([
+      ["marine", true],
+      ["forecast", true],
+      ["tides", true],
+      ["wind", false],
+    ]);
+    expect(formatReport(report)).toContain(
+      "wind: FAIL wind: Parameter 'latitude' and 'longitude' must have the same number of elements",
+    );
   });
 });
