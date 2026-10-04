@@ -1,6 +1,6 @@
 {
   "name": "surf-report",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "A public surf forecast for Rockaway Beach, NYC.",
   "type": "module",
