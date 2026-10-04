@@ -7,7 +7,7 @@ test.beforeEach(({}, info) => {
   test.skip(info.project.name !== "desktop", "no browser needed");
 });
 
-const PAGE_CACHE = "public, max-age=0, s-maxage=120";
+const PAGE_CACHE = "public, max-age=0, s-maxage=120, no-transform";
 
 async function get(request: APIRequestContext, scenario: Scenario, path: string) {
   return request.get(`${urlFor(scenario)}${path}`, { maxRedirects: 0 });
@@ -24,19 +24,19 @@ test("ok: pages are cacheable at the edge for two minutes", async ({ request }) 
 test("partial: a page built from incomplete data is not cacheable", async ({ request }) => {
   const res = await get(request, "partial", "/");
   expect(res.status()).toBe(200);
-  expect(res.headers()["cache-control"]).toBe("no-store");
+  expect(res.headers()["cache-control"]).toBe("no-store, no-transform");
 });
 
 test("down: the unavailable page answers 503 and is not cached", async ({ request }) => {
   const res = await get(request, "down", "/");
   expect(res.status()).toBe(503);
-  expect(res.headers()["cache-control"]).toBe("no-store");
+  expect(res.headers()["cache-control"]).toBe("no-store, no-transform");
   expect(await res.text()).toContain("Forecast unavailable");
 });
 
 test("hang: the first page is not cacheable", async ({ request }) => {
   const res = await get(request, "hang", "/");
-  expect(res.headers()["cache-control"]).toBe("no-store");
+  expect(res.headers()["cache-control"]).toBe("no-store, no-transform");
 });
 
 // The start waits at most 10 seconds for the first upstream data, so a server
@@ -64,7 +64,7 @@ test("hang: a fresh server is ready within 15 seconds", async ({ request }) => {
     expect(ready).toBe(true);
     expect(took).toBeLessThan(15_000);
     const res = await request.get("http://127.0.0.1:4155/", { maxRedirects: 0 });
-    expect(res.headers()["cache-control"]).toBe("no-store");
+    expect(res.headers()["cache-control"]).toBe("no-store, no-transform");
   } finally {
     child.kill("SIGTERM");
   }
@@ -88,7 +88,7 @@ test.describe("unknown paths", () => {
   test("a missing page is 404 and not cached", async ({ request }) => {
     const res = await get(request, "ok", "/nope");
     expect(res.status()).toBe(404);
-    expect(res.headers()["cache-control"]).toBe("no-store");
+    expect(res.headers()["cache-control"]).toBe("no-store, no-transform");
   });
 
   test("a trailing slash or a query string redirects to the plain path", async ({ request }) => {

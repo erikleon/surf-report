@@ -190,7 +190,7 @@ describe("routes", () => {
     const res = await get(base, "/nope");
     expect(res.status).toBe(404);
     expect(await res.text()).toContain("Page not found");
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("does not treat inherited object keys as pages", async () => {
@@ -222,7 +222,7 @@ describe("healthz", () => {
     const after = await get(base, "/healthz");
     expect(after.status).toBe(200);
     expect(await after.json()).toEqual({ ok: true, ready: true });
-    expect(after.headers.get("cache-control")).toBe("no-store");
+    expect(after.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 });
 
@@ -232,7 +232,7 @@ describe("methods", () => {
     const res = await fetch(`${base}/`, { method });
     expect(res.status).toBe(405);
     expect(res.headers.get("allow")).toBe("GET, HEAD");
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("answers HEAD with the GET headers and no body", async () => {
@@ -267,7 +267,7 @@ describe("redirects", () => {
     const res = await get(base, from);
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe(to);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("does not redirect other paths, which are plain 404s", async () => {
@@ -290,7 +290,7 @@ describe("unavailable", () => {
       const res = await get(base, path);
       expect(res.status).toBe(503);
       expect(res.headers.get("retry-after")).toBe("30");
-      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
       expect(await res.text()).toContain("Forecast unavailable");
     }
   });
@@ -300,7 +300,7 @@ describe("unavailable", () => {
     const base = await serve({ snapshot: { ...emptySnapshot(), tides: snapshot.tides } });
     const res = await get(base, "/");
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 });
 
@@ -342,13 +342,33 @@ describe("headers", () => {
       expect(res.headers.has("set-cookie")).toBe(false);
     }
   });
+
+  it("tells the edge not to rewrite any response, so no script is injected", async () => {
+    const okBase = await serve();
+    const emptyBase = await serve({ snapshot: emptySnapshot() });
+    const responses = [
+      await get(okBase, "/"),
+      await get(okBase, "/week"),
+      await get(okBase, "/about"),
+      await get(okBase, "/nope"),
+      await get(okBase, "/healthz"),
+      await get(okBase, assets.urls.css),
+      await get(okBase, assets.urls.geist),
+      await fetch(`${okBase}/`, { method: "POST" }),
+      await fetch(`${okBase}/week/`, { redirect: "manual" }),
+      await get(emptyBase, "/"),
+    ];
+    for (const res of responses) {
+      expect(res.headers.get("cache-control") ?? "").toContain("no-transform");
+    }
+  });
 });
 
 describe("Cache-Control", () => {
   it.each(["/", "/week", "/about"])("lets the edge keep a complete fresh %s", async (path) => {
     const base = await serve();
     const res = await get(base, path);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120, no-transform");
   });
 
   it("sends no-store when tides are missing", async () => {
@@ -357,7 +377,7 @@ describe("Cache-Control", () => {
     for (const path of ["/", "/week", "/about"]) {
       const res = await get(base, path);
       expect(res.status).toBe(200);
-      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     }
   });
 
@@ -365,13 +385,13 @@ describe("Cache-Control", () => {
     const base = await serve({ now: NOW + 3 * 3_600_000 });
     const res = await get(base, "/");
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("sends no-store for the 404 and healthz", async () => {
     const base = await serve();
-    expect((await get(base, "/nope")).headers.get("cache-control")).toBe("no-store");
-    expect((await get(base, "/healthz")).headers.get("cache-control")).toBe("no-store");
+    expect((await get(base, "/nope")).headers.get("cache-control")).toBe("no-store, no-transform");
+    expect((await get(base, "/healthz")).headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("gives assets a one-year immutable policy", async () => {
@@ -379,7 +399,7 @@ describe("Cache-Control", () => {
     for (const url of Object.values(assets.urls)) {
       const res = await get(base, url);
       expect(res.status).toBe(200);
-      expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+      expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable, no-transform");
     }
   });
 });
@@ -504,7 +524,7 @@ describe("render errors", () => {
     const res = await get(base, "/week");
     const body = await res.text();
     expect(res.status).toBe(500);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
     expect(body).not.toMatch(/template exploded|\bat .*\.(ts|js)|Error/);
     expect(lines).toHaveLength(1);
@@ -556,7 +576,7 @@ describe("/map", () => {
     expect(await res.text()).toBe("<p>map</p>");
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(res.headers.get("content-security-policy")).toBe(MAP_CSP);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120, no-transform");
     expect(res.headers.has("set-cookie")).toBe(false);
     expect(seen[0]).toBe("ok");
     expect(seen[1]).toEqual({ nowMs: NOW, siteUrl: "https://surf.example", assets: mapAssets.urls });
@@ -574,7 +594,7 @@ describe("/map", () => {
     const base = await serve({ assets: mapAssets, snapshot: { ...snapshot, tides: {} } });
     const res = await get(base, "/map");
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("answers 503 when no upstream has ever loaded", async () => {
@@ -582,14 +602,14 @@ describe("/map", () => {
     const res = await get(base, "/map");
     expect(res.status).toBe(503);
     expect(res.headers.get("retry-after")).toBe("30");
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
   });
 
   it("answers 503 no-store when the map files are missing, and the forecast pages still answer 200", async () => {
     const base = await serve({ assets });
     const res = await get(base, "/map");
     expect(res.status).toBe(503);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     expect(res.headers.get("content-security-policy")).toBe(CSP);
     expect(await res.text()).toContain("Forecast unavailable");
     for (const path of ["/", "/week", "/about"]) expect((await get(base, path)).status, path).toBe(200);
@@ -605,7 +625,7 @@ describe("/map", () => {
       const res = await get(base, from);
       expect(res.status).toBe(301);
       expect(res.headers.get("location")).toBe(to);
-      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     }
   });
 
@@ -615,7 +635,7 @@ describe("/map", () => {
       if (key === "wind") continue;
       const res = await get(base, url);
       expect(res.status, key).toBe(200);
-      expect(res.headers.get("cache-control"), key).toBe("public, max-age=31536000, immutable");
+      expect(res.headers.get("cache-control"), key).toBe("public, max-age=31536000, immutable, no-transform");
       expect(res.headers.has("set-cookie"), key).toBe(false);
     }
   });
@@ -661,7 +681,7 @@ describe("basemap ranges", () => {
     expect(res.status).toBe(200);
     expect(res.headers["accept-ranges"]).toBe("bytes");
     expect(res.headers["content-type"]).toBe("application/octet-stream");
-    expect(res.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+    expect(res.headers["cache-control"]).toBe("public, max-age=31536000, immutable, no-transform");
     expect(res.body).toEqual(BASEMAP);
   });
 
@@ -680,7 +700,7 @@ describe("basemap ranges", () => {
     expect(res.headers["content-range"]).toBe(`bytes ${start}-${end}/${size}`);
     expect(res.headers["accept-ranges"]).toBe("bytes");
     expect(res.headers["content-length"]).toBe(String(end - start + 1));
-    expect(res.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+    expect(res.headers["cache-control"]).toBe("public, max-age=31536000, immutable, no-transform");
     expect(res.body).toEqual(BASEMAP.subarray(start, end + 1));
   });
 
@@ -689,7 +709,7 @@ describe("basemap ranges", () => {
     const res = await raw(base, basemapUrl(), { range });
     expect(res.status).toBe(416);
     expect(res.headers["content-range"]).toBe(`bytes */${size}`);
-    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["cache-control"]).toBe("no-store, no-transform");
     expect(res.body.length).toBe(0);
   });
 
@@ -751,7 +771,7 @@ describe("/data/wind.json", () => {
     const res = await get(base, "/data/wind.json");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120, no-transform");
     expect(res.headers.has("set-cookie")).toBe(false);
     const body = await res.text();
     expect(body).toBe(toWindJson(windView(snapshot.wind, NOW)));
@@ -764,7 +784,7 @@ describe("/data/wind.json", () => {
     const base = await serve({ snapshot, now: later });
     const res = await get(base, "/data/wind.json");
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     const body = await res.text();
     expect(body).toBe(toWindJson(windView(snapshot.wind, later)));
     expect(JSON.parse(body)).toMatchObject({ state: "stale", asOf: NOW });
@@ -774,7 +794,7 @@ describe("/data/wind.json", () => {
     const base = await serve({ snapshot: emptySnapshot() });
     const res = await get(base, "/data/wind.json");
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("no-store, no-transform");
     expect(await res.json()).toEqual({ state: "missing" });
   });
 
@@ -837,7 +857,7 @@ describe("startServer", () => {
     const base = `http://127.0.0.1:${port}`;
     const res = await get(base, "/");
     expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120, no-transform");
     expect((await get(base, "/healthz")).status).toBe(200);
 
     await running.stop();

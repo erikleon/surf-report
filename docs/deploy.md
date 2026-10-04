@@ -80,7 +80,7 @@ It must answer `206`, `Content-Range: bytes 0-16383/<size>` and no `Content-Enco
 
 ## Response headers
 
-- Complete pages: `Cache-Control: public, max-age=0, s-maxage=120`. The browser always revalidates. Cloudflare keeps the page for 2 minutes.
+- Complete pages: `Cache-Control: public, max-age=0, s-maxage=120, no-transform`. The browser always revalidates. Cloudflare keeps the page for 2 minutes.
 - Loading, partial and error pages: `Cache-Control: no-store`.
 - A strict `Content-Security-Policy` on every response:
 
@@ -96,12 +96,12 @@ It must answer `206`, `Content-Range: bytes 0-16383/<size>` and no `Content-Enco
   connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   ```
 
-- Static files under `/assets/` use `Cache-Control: public, max-age=31536000, immutable`. Their file names contain a content hash.
+- Static files under `/assets/` use `Cache-Control: public, max-age=31536000, immutable, no-transform`. Their file names contain a content hash.
 - The basemap `/assets/map/basemap.<hash>.pmtiles` answers byte ranges: `Accept-Ranges: bytes`, `206` with `Content-Range` for one range (`bytes=a-b`, `bytes=a-` or `bytes=-n`), `416` with `Content-Range: bytes */<size>` when the range starts past the end, and the whole file with `200` for a request with more than one range or a range the server cannot parse. `If-Range` is ignored; the hashed name already pins the file. The basemap is never compressed.
 - A page URL with a trailing slash or a query string gets a 301 to the plain path, so cache-busting URLs do not skip the edge cache. This covers `/`, `/week`, `/about`, `/map` and `/data/wind.json`.
 - When no upstream has ever loaded, pages answer 503 with `Retry-After: 30`.
-- `/map` follows the same cache rules as the other pages. When a map file was missing at start, the server logs one line naming every missing file, keeps serving the forecast pages, and answers `/map` with the 503 page and `no-store`. Restart with the files in place to turn the map on.
-- `/data/wind.json` is the wind field for the map, built from the cache on each request and compressed like a page. A fresh field gets `Cache-Control: public, max-age=0, s-maxage=120`; a stale or missing one gets `no-store`. It answers 200 even when the field is missing, with `{"state":"missing"}`.
+- `/map` follows the same cache rules as the other pages. When a map file was missing at start, the server logs one line naming every missing file, keeps serving the forecast pages, and answers `/map` with the 503 page and `no-store, no-transform`. Restart with the files in place to turn the map on.
+- `/data/wind.json` is the wind field for the map, built from the cache on each request and compressed like a page. A fresh field gets `Cache-Control: public, max-age=0, s-maxage=120, no-transform`; a stale or missing one gets `no-store, no-transform`. It answers 200 even when the field is missing, with `{"state":"missing"}`.
 - No cookies. There must be no `Set-Cookie` header.
 - A bad `PORT` or `SITE_URL` stops the process at start with a message that names the variable.
 
@@ -131,3 +131,5 @@ To copy the files off the host:
 ```
 docker cp surf-report:/data ./verdicts
 ```
+
+Every response also carries `no-transform`. Cloudflare honours it by not rewriting the response, which keeps its Web Analytics beacon and other HTML rewrites out of the pages even when those features are on for the zone. Without it, Cloudflare injected `static.cloudflareinsights.com/beacon.min.js`, a third-party script the CSP blocks.

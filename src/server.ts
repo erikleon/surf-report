@@ -46,9 +46,13 @@ const MAP_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; " +
   "connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-const CACHE_PAGE = "public, max-age=0, s-maxage=120";
-const CACHE_ASSET = "public, max-age=31536000, immutable";
-const NO_STORE = "no-store";
+// Every response carries no-transform. Cloudflare reads it as "do not rewrite
+// this": without it, the edge injects its Web Analytics beacon (a third-party
+// script the CSP then blocks) and may apply other HTML rewrites, and none of
+// that should depend on which dashboard switches happen to be on.
+const CACHE_PAGE = "public, max-age=0, s-maxage=120, no-transform";
+const CACHE_ASSET = "public, max-age=31536000, immutable, no-transform";
+const NO_STORE = "no-store, no-transform";
 
 /** Bodies this size or smaller are sent as they are. */
 const COMPRESS_OVER_BYTES = 1024;
