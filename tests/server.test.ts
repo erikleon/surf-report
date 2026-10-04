@@ -12,6 +12,7 @@ import { tideDateRange } from "../src/time.js";
 import { buildForecastUrl } from "../src/upstream/forecast.js";
 import { buildMarineUrl } from "../src/upstream/marine.js";
 import { buildTidesUrl } from "../src/upstream/tides.js";
+import { buildWindGridUrl } from "../src/upstream/windGrid.js";
 import { createApp, type Pages } from "../src/server.js";
 import { fakeFetch } from "./upstream/fakeFetch.js";
 
@@ -24,6 +25,7 @@ const goodRoutes = {
   [buildMarineUrl()]: { file: "marine.json" },
   [buildForecastUrl()]: { file: "forecast.json" },
   [buildTidesUrl(tideDateRange(NOW, 6))]: { file: "tides.json" },
+  [buildWindGridUrl()]: { file: "windgrid.json" },
 };
 
 async function freshSnapshot(): Promise<CacheSnapshot> {
@@ -32,7 +34,7 @@ async function freshSnapshot(): Promise<CacheSnapshot> {
   return cache.snapshot();
 }
 
-const emptySnapshot = (): CacheSnapshot => ({ marine: {}, forecast: {}, tides: {} });
+const emptySnapshot = (): CacheSnapshot => ({ marine: {}, forecast: {}, tides: {}, wind: {} });
 
 // ---- temp assets ----
 

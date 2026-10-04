@@ -24,6 +24,7 @@ function snap(marineAt?: number, forecastAt?: number, tidesAt?: number): CacheSn
     marine: marineAt === undefined ? {} : { value: marine, fetchedAt: marineAt },
     forecast: forecastAt === undefined ? {} : { value: forecast, fetchedAt: forecastAt },
     tides: tidesAt === undefined ? {} : { value: tides, fetchedAt: tidesAt },
+    wind: {},
   };
 }
 

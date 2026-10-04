@@ -2,12 +2,17 @@
 //
 // A failed refresh keeps the old value and its fetchedAt, so the page can keep
 // showing old numbers while the freshness rules decide what to hide.
+//
+// The wind grid is refreshed like the others but is not part of the startup
+// barrier: it only feeds the wind map, and a slow grid must never hold back
+// the forecast pages.
 
 import { REFRESH_MS } from "./freshness.js";
 import { tideDateRange } from "./time.js";
 import { fetchForecast } from "./upstream/forecast.js";
 import { fetchMarine } from "./upstream/marine.js";
 import { fetchTides } from "./upstream/tides.js";
+import { fetchWindGrid, type WindField } from "./upstream/windGrid.js";
 import type { FetchFn, ForecastSeries, MarineSeries, Result, TideSeries } from "./types.js";
 
 export interface Entry<T> {
@@ -22,19 +27,23 @@ export interface CacheSnapshot {
   marine: Entry<MarineSeries>;
   forecast: Entry<ForecastSeries>;
   tides: Entry<TideSeries>;
+  wind: Entry<WindField>;
 }
 
 export type UpstreamName = keyof CacheSnapshot;
 
 export type RefreshCallback = (name: UpstreamName, result: Result<unknown>) => void;
 
-const NAMES: UpstreamName[] = ["marine", "forecast", "tides"];
+const NAMES: UpstreamName[] = ["marine", "forecast", "tides", "wind"];
+
+/** The upstreams start() waits for. The pages cannot be built without them. */
+const BARRIER: UpstreamName[] = ["marine", "forecast", "tides"];
 
 export interface CacheOptions {
   fetchImpl?: FetchFn;
   now?: () => number;
   intervals?: Record<UpstreamName, number>;
-  /** How long start() waits for the first fetches. */
+  /** How long start() waits for the first marine, forecast and tide fetches. */
   startTimeoutMs?: number;
   /** Called after each refresh, once the snapshot already holds the result. */
   onRefresh?: RefreshCallback;
@@ -70,7 +79,7 @@ export function createCache(opts: CacheOptions = {}): Cache {
     opts.clearIntervalImpl ?? ((handle) => clearInterval(handle as ReturnType<typeof setInterval>));
   let onRefresh = opts.onRefresh;
 
-  const state: CacheSnapshot = { marine: {}, forecast: {}, tides: {} };
+  const state: CacheSnapshot = { marine: {}, forecast: {}, tides: {}, wind: {} };
   const inFlight = new Set<UpstreamName>();
   let timers: unknown[] = [];
 
@@ -82,6 +91,8 @@ export function createCache(opts: CacheOptions = {}): Cache {
         return fetchForecast(fetchImpl);
       case "tides":
         return fetchTides(tideDateRange(now(), 6), fetchImpl);
+      case "wind":
+        return fetchWindGrid(fetchImpl);
     }
   }
 
@@ -95,7 +106,7 @@ export function createCache(opts: CacheOptions = {}): Cache {
     } finally {
       inFlight.delete(name);
     }
-    // The three entries hold different value types, so write through a loose view.
+    // The entries hold different value types, so write through a loose view.
     const entry = state[name] as Entry<unknown>;
     if (result.ok) {
       entry.value = result.value;
@@ -109,7 +120,13 @@ export function createCache(opts: CacheOptions = {}): Cache {
   }
 
   async function start(): Promise<void> {
-    const all = Promise.all(NAMES.map((name) => refresh(name)));
+    // Wind starts now but is not awaited. refresh() reports fetch failures as
+    // results; a rejection here would be a bug, so it goes to the log rather
+    // than becoming an unhandled rejection that stops the server.
+    refresh("wind").catch((err: unknown) => {
+      log(`[cache] wind refresh crashed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    });
+    const all = Promise.all(BARRIER.map((name) => refresh(name)));
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<void>((resolve) => {
       timeout = setTimeout(resolve, startTimeoutMs);
@@ -140,6 +157,7 @@ export function createCache(opts: CacheOptions = {}): Cache {
       marine: { ...state.marine },
       forecast: { ...state.forecast },
       tides: { ...state.tides },
+      wind: { ...state.wind },
     }),
     refresh,
     setOnRefresh: (callback) => {

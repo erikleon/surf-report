@@ -17,7 +17,7 @@ const marine = load(parseMarine, "marine.json");
 const forecast = load(parseForecast, "forecast.json");
 
 function snapshotAt(at: number): CacheSnapshot {
-  return { marine: { value: marine, fetchedAt: at }, forecast: { value: forecast, fetchedAt: at }, tides: {} };
+  return { marine: { value: marine, fetchedAt: at }, forecast: { value: forecast, fetchedAt: at }, tides: {}, wind: {} };
 }
 
 const NOON = Date.UTC(2026, 9, 3, 16, 0); // 12:00 in New York

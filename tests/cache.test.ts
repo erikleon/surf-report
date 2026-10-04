@@ -4,16 +4,19 @@ import { tideDateRange } from "../src/time.js";
 import { buildForecastUrl } from "../src/upstream/forecast.js";
 import { buildMarineUrl } from "../src/upstream/marine.js";
 import { buildTidesUrl } from "../src/upstream/tides.js";
+import { buildWindGridUrl } from "../src/upstream/windGrid.js";
 import type { FetchFn } from "../src/types.js";
 import { fakeFetch, fixture, hangingFetch } from "./upstream/fakeFetch.js";
 
 const NOW = Date.UTC(2026, 9, 3, 14, 0);
 const TIDES_URL = buildTidesUrl(tideDateRange(NOW, 6));
+const WIND_URL = buildWindGridUrl();
 
 const goodRoutes = {
   [buildMarineUrl()]: { file: "marine.json" },
   [buildForecastUrl()]: { file: "forecast.json" },
   [TIDES_URL]: { file: "tides.json" },
+  [WIND_URL]: { file: "windgrid.json" },
 };
 
 /** Fake timers: records callbacks so a test can fire a tick by hand. */
@@ -136,7 +139,7 @@ describe("start and stop", () => {
     expect(snap.forecast.value).toBeDefined();
     expect(snap.tides.value).toBeDefined();
     expect([...timers.live.values()].map((t) => t.ms).sort((a, b) => a - b)).toEqual([
-      900_000, 900_000, 3_600_000,
+      900_000, 900_000, 3_600_000, 3_600_000,
     ]);
     cache.stop();
   });
@@ -152,7 +155,7 @@ describe("start and stop", () => {
     const snap = cache.snapshot();
     expect(snap.marine.value).toBeDefined();
     expect(snap.tides.value).toBeUndefined();
-    expect(timers.live.size).toBe(3);
+    expect(timers.live.size).toBe(4);
     cache.stop();
   });
 
@@ -207,6 +210,99 @@ describe("start and stop", () => {
       clearIntervalImpl: () => undefined,
     });
     await cache.start();
-    expect(unrefs).toHaveLength(3);
+    expect(unrefs).toHaveLength(4);
+  });
+});
+
+describe("wind", () => {
+  it("stores the grid like the other upstreams", async () => {
+    const cache = createCache({ fetchImpl: fakeFetch(goodRoutes), now: () => NOW, log: () => undefined });
+    await cache.refresh("wind");
+    const wind = cache.snapshot().wind;
+    expect(wind.value?.times).toHaveLength(48);
+    expect(wind.value?.speed[0]?.[0]).toHaveLength(10);
+    expect(wind.fetchedAt).toBe(NOW);
+    expect(cache.snapshot().marine).toEqual({});
+  });
+
+  it("keeps the old field when a refresh fails", async () => {
+    let routes: Record<string, { file: string; status?: number }> = goodRoutes;
+    const logs: string[] = [];
+    let now = NOW;
+    const fetchImpl = ((input: Parameters<FetchFn>[0], init?: RequestInit) =>
+      fakeFetch(routes)(input, init)) as FetchFn;
+    const cache = createCache({ fetchImpl, now: () => now, log: (l) => logs.push(l) });
+    await cache.refresh("wind");
+    const before = cache.snapshot().wind;
+
+    routes = { ...goodRoutes, [WIND_URL]: { file: "windgrid-error.json" } };
+    now += 3_600_000;
+    await cache.refresh("wind");
+    const after = cache.snapshot().wind;
+    expect(after.value).toEqual(before.value);
+    expect(after.fetchedAt).toBe(NOW);
+    expect(after.lastError).toContain("must have the same number of elements");
+    expect(logs).toEqual([expect.stringContaining("wind refresh failed")]);
+  });
+
+  it("start() does not wait for a wind fetch that hangs", async () => {
+    let release: ((r: Response) => void) | undefined;
+    const pending = new Promise<Response>((r) => (release = r));
+    const routes = fakeFetch(goodRoutes);
+    const slowWind = ((input: Parameters<FetchFn>[0], init?: RequestInit) =>
+      String(input) === WIND_URL ? pending : routes(input, init)) as FetchFn;
+    const timers = fakeTimers();
+    const cache = createCache({ fetchImpl: slowWind, now: () => NOW, startTimeoutMs: 5_000, ...timers });
+    const t0 = Date.now();
+    await cache.start();
+    expect(Date.now() - t0).toBeLessThan(1_000);
+    let snap = cache.snapshot();
+    expect(snap.marine.value).toBeDefined();
+    expect(snap.forecast.value).toBeDefined();
+    expect(snap.tides.value).toBeDefined();
+    expect(snap.wind).toEqual({});
+    expect(timers.live.size).toBe(4);
+
+    release?.(new Response(fixture("windgrid.json")));
+    await tick();
+    snap = cache.snapshot();
+    expect(snap.wind.value?.times).toHaveLength(48);
+    expect(snap.wind.fetchedAt).toBe(NOW);
+    cache.stop();
+  });
+
+  it("start() resolves with no wind when the first wind fetch fails", async () => {
+    const routes = { ...goodRoutes, [WIND_URL]: { file: "windgrid.json", status: 503 } };
+    const logs: string[] = [];
+    const timers = fakeTimers();
+    const cache = createCache({ fetchImpl: fakeFetch(routes), now: () => NOW, log: (l) => logs.push(l), ...timers });
+    await cache.start();
+    await tick();
+    const snap = cache.snapshot();
+    expect(snap.marine.value).toBeDefined();
+    expect(snap.wind.value).toBeUndefined();
+    expect(snap.wind.lastError).toBe("wind: HTTP 503");
+    expect(logs).toEqual(["[cache] wind refresh failed: wind: HTTP 503"]);
+    cache.stop();
+  });
+
+  it("refreshes wind on its own hourly timer", async () => {
+    let windCalls = 0;
+    const routes = fakeFetch(goodRoutes);
+    const counting = ((input: Parameters<FetchFn>[0], init?: RequestInit) => {
+      if (String(input) === WIND_URL) windCalls++;
+      return routes(input, init);
+    }) as FetchFn;
+    const timers = fakeTimers();
+    const cache = createCache({ fetchImpl: counting, now: () => NOW, ...timers });
+    await cache.start();
+    await tick();
+    expect(windCalls).toBe(1);
+    const hourly = [...timers.live.values()].filter((t) => t.ms === 3_600_000);
+    expect(hourly).toHaveLength(2);
+    for (const t of hourly) t.fn();
+    await tick();
+    expect(windCalls).toBe(2);
+    cache.stop();
   });
 });
