@@ -1,0 +1,26 @@
+{
+  "name": "surf-report",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A public surf forecast for Rockaway Beach, NYC.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:tz": "TZ=America/New_York vitest run && TZ=UTC vitest run && TZ=Pacific/Auckland vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "strictdatetime": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.3"
+  }
+}
