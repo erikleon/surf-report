@@ -67,15 +67,41 @@ For `surf.midwoodrathaus.fyi`:
 2. Add a Cache Rule for the host that caches HTML, with Edge TTL set to "Use cache-control header if present". The origin decides how long a page is cached.
 3. Turn Always Online off.
 4. Do not add any rule that serves stale content when the origin fails. A stale forecast is worse than an error page.
+5. Range requests on `/assets/map/basemap.<hash>.pmtiles` must reach the browser as `206 Partial Content`. Cloudflare either passes the `Range` header to the origin or caches the whole file (5.4 MB, well under the cache size limit) and cuts the ranges itself; both work. Do not add a rule that strips `Range`, and do not let any feature change the file: no compression, Polish, minification or Rocket Loader on `.pmtiles`. The tiles inside are already gzip-compressed, and the reader's byte offsets point into the file exactly as the origin sends it.
+
+Check the basemap through Cloudflare with:
+
+```
+curl -s -o /dev/null -D - -H 'Range: bytes=0-16383' -H 'Accept-Encoding: br, gzip' \
+  https://surf.midwoodrathaus.fyi/assets/map/basemap.<hash>.pmtiles
+```
+
+It must answer `206`, `Content-Range: bytes 0-16383/<size>` and no `Content-Encoding`. Take the hashed URL from the `"url"` of the style the `/map` page loads.
 
 ## Response headers
 
 - Complete pages: `Cache-Control: public, max-age=0, s-maxage=120`. The browser always revalidates. Cloudflare keeps the page for 2 minutes.
 - Loading, partial and error pages: `Cache-Control: no-store`.
-- A strict `Content-Security-Policy` on every response.
+- A strict `Content-Security-Policy` on every response:
+
+  ```
+  default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:;
+  connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  ```
+
+  The `/map` page alone adds `blob:` to `img-src` and adds `worker-src 'self'` for MapLibre's module worker:
+
+  ```
+  default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:;
+  connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  ```
+
 - Static files under `/assets/` use `Cache-Control: public, max-age=31536000, immutable`. Their file names contain a content hash.
-- A page URL with a trailing slash or a query string gets a 301 to the plain path, so cache-busting URLs do not skip the edge cache.
+- The basemap `/assets/map/basemap.<hash>.pmtiles` answers byte ranges: `Accept-Ranges: bytes`, `206` with `Content-Range` for one range (`bytes=a-b`, `bytes=a-` or `bytes=-n`), `416` with `Content-Range: bytes */<size>` when the range starts past the end, and the whole file with `200` for a request with more than one range or a range the server cannot parse. `If-Range` is ignored; the hashed name already pins the file. The basemap is never compressed.
+- A page URL with a trailing slash or a query string gets a 301 to the plain path, so cache-busting URLs do not skip the edge cache. This covers `/`, `/week`, `/about`, `/map` and `/data/wind.json`.
 - When no upstream has ever loaded, pages answer 503 with `Retry-After: 30`.
+- `/map` follows the same cache rules as the other pages. When a map file was missing at start, the server logs one line naming every missing file, keeps serving the forecast pages, and answers `/map` with the 503 page and `no-store`. Restart with the files in place to turn the map on.
+- `/data/wind.json` is the wind field for the map, built from the cache on each request and compressed like a page. A fresh field gets `Cache-Control: public, max-age=0, s-maxage=120`; a stale or missing one gets `no-store`. It answers 200 even when the field is missing, with `{"state":"missing"}`.
 - No cookies. There must be no `Set-Cookie` header.
 - A bad `PORT` or `SITE_URL` stops the process at start with a message that names the variable.
 
@@ -86,6 +112,10 @@ curl -sI https://surf.midwoodrathaus.fyi/
 ```
 
 A second request within 2 minutes should show `cf-cache-status: HIT`.
+
+## Upstream usage
+
+Open-Meteo counts each location in a request as one call. The wind grid asks for 100 points (a 10 by 10 grid over the New York Bight) in one request each hour, so it adds about 2,400 calls a day to the forecast and marine calls. That stays inside the free limit of 10,000 calls a day. A failed wind fetch does not affect the forecast pages; the map shows the old field as stale.
 
 ## Verdict log
 
