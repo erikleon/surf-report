@@ -81,10 +81,11 @@ describe.each(Object.entries(pages))("%s page", (name, html) => {
     expect(html).toContain('<p class="site"><a href="/">Rockaway</a></p>');
   });
 
-  it("has the three nav links and marks only the current one", () => {
+  it("has the four nav links in order and marks only the current one", () => {
     const nav = html.split("<nav")[1]?.split("</nav>")[0] ?? "";
-    expect(count(nav, /<a /g)).toBe(3);
-    for (const [href, text] of [["/", "Today"], ["/week", "Week"], ["/about", "About"]]) {
+    expect(count(nav, /<a /g)).toBe(4);
+    expect([...nav.matchAll(/>([A-Za-z]+)<\/a>/g)].map((m) => m[1])).toEqual(["Today", "Week", "Map", "About"]);
+    for (const [href, text] of [["/", "Today"], ["/week", "Week"], ["/map", "Map"], ["/about", "About"]]) {
       expect(nav).toContain(`href="${href}"`);
       expect(nav).toContain(`>${text}</a>`);
     }
