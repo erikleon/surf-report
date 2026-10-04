@@ -71,7 +71,7 @@ maplibregl.addProtocol("pmtiles", protocol.tile);
 Constraints for the server:
 
 - **The three `.mjs` files must stay siblings with their original names.** The main bundle and the worker import `./maplibre-gl-shared.mjs` by relative path, so renaming each file with its own hash breaks the import. Hash the directory instead, for example `/assets/vendor/maplibre-gl.<hash of all three>/maplibre-gl.mjs`. Serve them as `text/javascript`.
-- **Style placeholders.** Replace `__BASEMAP__` in `"url": "pmtiles://__BASEMAP__"` with the absolute URL of the basemap (`pmtiles://https://surf.../assets/map/basemap.<hash>.pmtiles`), and `__GLYPHS__` in `"glyphs": "__GLYPHS__/{fontstack}/{range}.pbf"` with the absolute URL of the glyphs directory. The load check used absolute URLs; relative ones were not tried.
+- **Style placeholders.** The server replaces `__BASEMAP__` in `"url": "pmtiles://__BASEMAP__"` and `__GLYPHS__` in `"glyphs": "__GLYPHS__/{fontstack}/{range}.pbf"` with root-relative paths, not absolute URLs. See "Served URLs" below for why that works.
 - **Glyph paths contain spaces.** MapLibre requests `/…/glyphs/Noto%20Sans%20Regular/0-255.pbf`; decode the path before looking it up. Serve `.pbf` as `application/x-protobuf`. A view of Rockaway asks for Regular `0-255` and `8192-8447` (OSM names here contain an en dash). Medium is only used for large-city labels at low zoom.
 - **`.pmtiles` needs HTTP Range requests.** The reader asks for `bytes=0-16383` first, then one range per tile run. Answer `206 Partial Content` with `Content-Range` and `Accept-Ranges: bytes`. Never apply `Content-Encoding` to it: the tiles inside are already gzip-compressed, and a compressed range response breaks the offsets. A `200` with the full body would make every visit download all 5.4 MB. Give the file a content-hashed URL so its ETag cannot change during a session (the reader throws `EtagMismatch` when it does), and check that Cloudflare passes range requests through or caches the file and serves ranges from it.
 - **CSP for `/map` only:**
@@ -83,6 +83,36 @@ Constraints for the server:
   ```
 
   `connect-src 'self'` covers the style, glyph and PMTiles range fetches. `worker-src 'self'` covers the module worker. `img-src data:` is needed by `maplibre-gl.css`, whose control icons are `data:` SVGs. No `'unsafe-eval'`, no `'unsafe-inline'` and no `blob:` in `worker-src` or `script-src`. MapLibre sets element styles through the CSSOM, which `style-src 'self'` allows. This exact policy rendered both styles in Chromium with no CSP violation.
+
+## Served URLs
+
+The server reads every map file once at start (`src/assets.ts`) and hands the page these URLs as `ctx.assets.map` (`MapAssets` in `src/pages/context.ts`). `<h>` is the first 8 hex characters of a SHA-256.
+
+| Field | URL | Type |
+| --- | --- | --- |
+| `maplibre` | `/assets/vendor/maplibre-gl.<h>/maplibre-gl.mjs` | `text/javascript` |
+| (worker) | `/assets/vendor/maplibre-gl.<h>/maplibre-gl-worker.mjs` | `text/javascript` |
+| (shared chunk) | `/assets/vendor/maplibre-gl.<h>/maplibre-gl-shared.mjs` | `text/javascript` |
+| `maplibreCss` | `/assets/vendor/maplibre-gl.<h>.css` | `text/css` |
+| `pmtiles` | `/assets/vendor/pmtiles.<h>.js` | `text/javascript` |
+| `client` | `/assets/map.<h>.js` (from `assets/map.js`) | `text/javascript` |
+| `styleLight`, `styleDark` | `/assets/map/style-light.<h>.json`, `/assets/map/style-dark.<h>.json` | `application/json` |
+| `staticSvg` | `/assets/map/nearshore.<h>.svg` | `image/svg+xml` |
+| `bathymetry`, `land`, `shore` | `/assets/map/data/<name>.<h>.geojson` (from `data/map/`) | `application/geo+json` |
+| `wind` | `/data/wind.json`, live, not hashed | `application/json` |
+| (in the styles) | `/assets/map/basemap.<h>.pmtiles` | `application/octet-stream`, Range, never compressed |
+| (in the styles) | `/assets/map/glyphs.<h>/<font>/<range>.pbf` | `application/x-protobuf`, not compressed |
+
+- The three `.mjs` files share one folder whose hash covers all three, so their relative imports keep working. Set the worker URL by replacing the file name in `maplibre`: `maplibregl.setWorkerUrl(urls.maplibre.replace(/maplibre-gl\.mjs$/, "maplibre-gl-worker.mjs"))`.
+- The glyph folder hash covers every `.pbf` file. Only `<font>/<range>.pbf` files on disk resolve; anything else is a 404.
+- The style hashes are taken after the placeholders are replaced, so a new basemap or glyph set gives new style URLs.
+- If any map file is missing at start, `ctx.assets.map` is undefined, `/map` answers 503 and the other pages are unaffected.
+
+In the served styles the basemap source is `"url": "pmtiles:///assets/map/basemap.<h>.pmtiles"` and the glyphs are `"glyphs": "/assets/map/glyphs.<h>/{fontstack}/{range}.pbf"`. The client does not need to prefix `location.origin`:
+
+- The pmtiles protocol handler strips `pmtiles://` (`e.url.substr(10)`, and the tile regex `pmtiles:\/\/(.+)\/(\d+)\/(\d+)\/(\d+)`), leaving `/assets/map/basemap.<h>.pmtiles`, which its `FetchSource` passes to `fetch()`. The handler runs on the main thread (`addProtocol` there; the worker forwards custom-protocol requests to it), so the path resolves against the page's origin.
+- MapLibre 6 builds glyph URLs with a plain string replace of `{fontstack}` and `{range}` and fetches them on the main thread (`_loadGlyphRange` in `maplibre-gl.mjs`). The style validator only checks that both tokens are there. It never turns the URL into an absolute one, and a root-relative path resolves against the page.
+- Checked in Chromium with the real vendored files and the `/map` CSP: the style loaded, 7 basemap range requests came back `206`, Regular `0-255` and `8192-8447` came back `200`, labels rendered, and MapLibre caused no CSP violation.
 
 ## Basemap
 
