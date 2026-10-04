@@ -1,0 +1,28 @@
+# Typecheck, test and build on every push to main and every pull request.
+# The browser suite and the nightly upstream contract check are separate
+# workflows, added with their own lanes.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # The suite runs under three host timezones: nothing on the page may
+      # depend on the zone the server happens to be in.
+      - run: npm run test:tz
+      - run: npm run build
