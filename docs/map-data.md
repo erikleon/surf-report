@@ -41,6 +41,16 @@ bash scripts/map/build-bathymetry.sh
 
 The build is deterministic: the same pinned inputs give byte-identical files. To keep the intermediate rasters, set `WORK_DIR=/some/dir`. When NOAA publishes a new BlueTopo tile, its file name changes. Update the tile list at the top of the script, rebuild, and update `SOURCES.json`.
 
+## The static map
+
+`assets/map/nearshore.svg` is drawn from these files by `src/mapSvg.ts`. The same run writes `src/mapFacts.ts`, the jetty count, labelled streets, depths, survey line, sources and map bounds that the `/map` page prints as text. After changing anything in `data/map/` or `src/mapSvg.ts`:
+
+```
+npm run build && node scripts/map/render-svg.mjs
+```
+
+`tests/mapSvg.test.ts` renders the data again and fails when either committed file differs, so the two cannot drift. The map is turned 17 degrees so the beach runs across, covers Fort Tilden to about Beach 35th Street, and stays under 250 KB (about 44 KB now).
+
 ## Limits
 
 - The surveys are snapshots, years old in places. Sandbars and the troughs beside the jetties move with every storm and through each season, so the map shows the bottom as it was surveyed, not as it is today.

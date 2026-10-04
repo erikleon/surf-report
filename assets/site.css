@@ -30,6 +30,8 @@
   --nodata: rgba(15, 34, 48, 0.1);
   --night: rgba(15, 34, 48, 0.07);
   --sea-faded: rgba(31, 95, 122, 0.3);
+  /* Light paper in both modes: the panel behind the static map image. */
+  --map-paper: #f2eee4;
 
   --font-body: "Geist", "Geist Fallback", system-ui, sans-serif;
   --font-display: "Instrument Serif", "Instrument Serif Fallback", "Times New Roman", serif;
@@ -993,6 +995,155 @@ p.empty {
 @media (max-width: 639px) {
   .call-word {
     font-size: 28px;
+  }
+}
+
+/* ---- Map ---- */
+
+/*
+ * The interactive map and the static fallback share one grid cell. The canvas
+ * keeps its size while hidden, so MapLibre can draw into it and the page does
+ * not move when the client adds .map-ready. Until then, or with JavaScript
+ * off, the static map is what shows.
+ */
+.map {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: var(--s-lg);
+}
+
+.map-canvas,
+.map-fallback {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.map-canvas {
+  width: 100%;
+  aspect-ratio: 5 / 2;
+  min-height: 360px;
+  visibility: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--foam);
+}
+
+.map.map-ready .map-canvas {
+  visibility: visible;
+}
+
+.map-fallback {
+  margin: 0;
+}
+
+.map.map-ready .map-fallback {
+  display: none;
+}
+
+/* The SVG is wide and its labels are small, so on a phone it keeps a readable
+   size and scrolls sideways instead of shrinking. */
+.map-scroll {
+  overflow-x: auto;
+  border-radius: var(--r-sm);
+}
+
+.map-scroll img {
+  display: block;
+  width: 100%;
+  min-width: 820px;
+  height: auto;
+}
+
+.map-fallback figcaption,
+.map-credit {
+  margin-top: var(--s-sm);
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 80ch;
+}
+
+.map-credit a {
+  color: var(--ink);
+}
+
+/* Controls the map client adds. */
+.wind-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-xs) var(--s-md);
+  margin-top: var(--s-sm);
+  font-size: 14px;
+}
+
+.wind-hour {
+  flex: 1 1 220px;
+  min-height: var(--tap);
+  margin: 0;
+  accent-color: var(--sea);
+}
+
+.wind-label {
+  min-width: 14ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.wind-stale {
+  flex-basis: 100%;
+  border-top: 3px solid var(--stale);
+  padding-top: var(--s-sm);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.wind-stale::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--s-xs);
+  background: var(--stale);
+  border-radius: var(--r-sm);
+}
+
+.map-status {
+  margin-top: var(--s-sm);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.wind-now {
+  margin-top: var(--s-xs);
+}
+
+.wind-now .asof {
+  margin-top: var(--s-xs);
+}
+
+/* MapLibre's attribution control, set in the page's type and colours. */
+.map .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 12px;
+  border-radius: var(--r-sm);
+}
+
+.map .maplibregl-ctrl-attrib a {
+  color: var(--ink);
+}
+
+/* An <img> never follows the page's dark mode, so the static map, drawn in
+   light colours, sits on a light paper panel. */
+@media (prefers-color-scheme: dark) {
+  .map-scroll {
+    background: var(--map-paper);
+    padding: var(--s-sm);
+    border-radius: var(--r-md);
+  }
+
+  .map .maplibregl-ctrl-attrib-button {
+    filter: invert(1);
   }
 }
 

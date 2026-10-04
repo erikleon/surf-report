@@ -3,7 +3,7 @@
 import { escapeHtml } from "../html.js";
 import type { PageContext } from "./context.js";
 
-export type NavItem = "today" | "week" | "about";
+export type NavItem = "today" | "week" | "map" | "about";
 
 export interface PageSpec {
   title: string;
@@ -14,6 +14,8 @@ export interface PageSpec {
   current?: NavItem;
   /** Only the home page carries the scrub script. */
   script?: boolean;
+  /** Extra stylesheet and script tags, placed before the site stylesheet so it can override them. */
+  head?: string;
   /** Error pages ask search engines to skip them. */
   noindex?: boolean;
   body: string;
@@ -22,6 +24,7 @@ export interface PageSpec {
 const NAV: Array<{ id: NavItem; href: string; text: string }> = [
   { id: "today", href: "/", text: "Today" },
   { id: "week", href: "/week", text: "Week" },
+  { id: "map", href: "/map", text: "Map" },
   { id: "about", href: "/about", text: "About" },
 ];
 
@@ -56,6 +59,7 @@ export function page(ctx: PageContext, spec: PageSpec): string {
     `<link rel="canonical" href="${escapeHtml(canonical)}">` +
     `<link rel="preload" href="${escapeHtml(a.geist)}" as="font" type="font/woff2" crossorigin>` +
     `<link rel="preload" href="${escapeHtml(a.serif)}" as="font" type="font/woff2" crossorigin>` +
+    (spec.head ?? "") +
     `<link rel="stylesheet" href="${escapeHtml(a.css)}">` +
     (spec.script ? `<script src="${escapeHtml(a.js)}" defer></script>` : "") +
     `</head><body>` +
