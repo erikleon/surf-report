@@ -1,0 +1,230 @@
+// The HTTP server: routing, response headers and compression. Pages come from
+// the renderers; this file decides status codes and what the edge may cache.
+
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
+import { promisify } from "node:util";
+import type { Assets } from "./assets.js";
+import type { Cache } from "./cache.js";
+import { buildModel, type SiteModel } from "./model.js";
+import * as defaultPages from "./pages/index.js";
+import type { PageContext } from "./pages/index.js";
+
+const brotliAsync = promisify(brotliCompress);
+const gzipAsync = promisify(gzip);
+
+/** The page renderers the server calls. Tests can swap them. */
+export interface Pages {
+  renderHome(model: SiteModel, ctx: PageContext): string;
+  renderWeek(model: SiteModel, ctx: PageContext): string;
+  renderAbout(model: SiteModel, ctx: PageContext): string;
+  renderNotFound(ctx: PageContext): string;
+  renderUnavailable(ctx: PageContext): string;
+}
+
+export interface AppDeps {
+  cache: Pick<Cache, "snapshot">;
+  assets: Assets;
+  siteUrl: string;
+  /** Epoch milliseconds. */
+  now: () => number;
+  isReady: () => boolean;
+  pages?: Pages;
+  /** Where server errors go. Defaults to stderr. */
+  log?: (line: string) => void;
+}
+
+const CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; " +
+  "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+const CACHE_PAGE = "public, max-age=0, s-maxage=120";
+const CACHE_ASSET = "public, max-age=31536000, immutable";
+const NO_STORE = "no-store";
+
+/** Bodies this size or smaller are sent as they are. */
+const COMPRESS_OVER_BYTES = 1024;
+
+const HTML_TYPE = "text/html; charset=utf-8";
+
+type Headers = Record<string, string>;
+
+interface Reply {
+  status: number;
+  type: string;
+  cache: string;
+  body: Buffer | string;
+  extra?: Headers;
+  /** Precompressed bodies, for assets. */
+  encodings?: Record<string, Buffer>;
+  /** Compress `body` on the fly when the client accepts it. */
+  compress?: boolean;
+}
+
+/** Content codings the client accepts, from Accept-Encoding, with q=0 meaning "not accepted". */
+function acceptedCodings(header: string | undefined): Set<string> {
+  const accepted = new Set<string>();
+  if (header === undefined) return accepted;
+  for (const part of header.split(",")) {
+    const [rawName, ...params] = part.trim().split(";");
+    const name = rawName?.trim().toLowerCase();
+    if (!name) continue;
+    const q = params.map((p) => p.trim()).find((p) => p.toLowerCase().startsWith("q="));
+    if (q !== undefined && !(Number(q.slice(2)) > 0)) continue;
+    accepted.add(name);
+  }
+  return accepted;
+}
+
+function pickCoding(header: string | undefined, available: readonly string[]): string | undefined {
+  const accepted = acceptedCodings(header);
+  return available.find((name) => accepted.has(name) || (name === "gzip" && accepted.has("x-gzip")));
+}
+
+async function send(req: IncomingMessage, res: ServerResponse, reply: Reply): Promise<void> {
+  let body = typeof reply.body === "string" ? Buffer.from(reply.body, "utf8") : reply.body;
+  const headers: Headers = {
+    "Content-Type": reply.type,
+    "Cache-Control": reply.cache,
+    "Content-Security-Policy": CSP,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    ...reply.extra,
+  };
+
+  const acceptEncoding = req.headers["accept-encoding"];
+  if (reply.encodings !== undefined && Object.keys(reply.encodings).length > 0) {
+    headers["Vary"] = "Accept-Encoding";
+    const coding = pickCoding(acceptEncoding, ["br", "gzip"]);
+    const variant = coding === undefined ? undefined : reply.encodings[coding];
+    if (coding !== undefined && variant !== undefined) {
+      body = variant;
+      headers["Content-Encoding"] = coding;
+    }
+  } else if (reply.compress === true) {
+    headers["Vary"] = "Accept-Encoding";
+    const coding = body.length > COMPRESS_OVER_BYTES ? pickCoding(acceptEncoding, ["br", "gzip"]) : undefined;
+    if (coding === "br") {
+      body = await brotliAsync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } });
+      headers["Content-Encoding"] = "br";
+    } else if (coding === "gzip") {
+      body = await gzipAsync(body);
+      headers["Content-Encoding"] = "gzip";
+    }
+  }
+
+  headers["Content-Length"] = String(body.length);
+  res.writeHead(reply.status, headers);
+  res.end(req.method === "HEAD" ? undefined : body);
+}
+
+function redirect(to: string): Reply {
+  return { status: 301, type: "text/plain; charset=utf-8", cache: NO_STORE, body: "", extra: { Location: to } };
+}
+
+export function createApp(deps: AppDeps): Server {
+  const pages = deps.pages ?? defaultPages;
+  const log = deps.log ?? ((line: string) => void process.stderr.write(`${line}\n`));
+
+  const pageRoutes: Record<string, (model: SiteModel, ctx: PageContext) => string> = {
+    "/": (m, c) => pages.renderHome(m, c),
+    "/week": (m, c) => pages.renderWeek(m, c),
+    "/about": (m, c) => pages.renderAbout(m, c),
+  };
+
+  function context(): PageContext {
+    return { nowMs: deps.now(), siteUrl: deps.siteUrl, assets: deps.assets.urls };
+  }
+
+  function route(req: IncomingMessage): Reply {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return {
+        status: 405,
+        type: "text/plain; charset=utf-8",
+        cache: NO_STORE,
+        body: "Method not allowed\n",
+        extra: { Allow: "GET, HEAD" },
+      };
+    }
+
+    // Split by hand: new URL() would resolve a path like "//host" as a host name.
+    const target = req.url ?? "/";
+    const queryAt = target.indexOf("?");
+    const hasQuery = queryAt !== -1;
+    const pathname = hasQuery ? target.slice(0, queryAt) : target;
+
+    if (pathname === "/healthz") {
+      const ready = deps.isReady();
+      return {
+        status: ready ? 200 : 503,
+        type: "application/json; charset=utf-8",
+        cache: NO_STORE,
+        body: JSON.stringify({ ok: true, ready }),
+      };
+    }
+
+    if (pathname.startsWith("/assets/")) {
+      const asset = deps.assets.lookup(pathname);
+      if (asset === undefined) return notFound();
+      return { status: 200, type: asset.type, cache: CACHE_ASSET, body: asset.body, encodings: asset.encodings };
+    }
+
+    // A page URL with a trailing slash or a query string is sent to the plain
+    // path, so cache-busting URLs cannot get around the edge cache.
+    const plain = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+    const render = Object.hasOwn(pageRoutes, plain) ? pageRoutes[plain] : undefined;
+    if (render === undefined) return notFound();
+    if (plain !== pathname || hasQuery) return redirect(plain);
+
+    const ctx = context();
+    const model = buildModel(deps.cache.snapshot(), ctx.nowMs);
+    if (model.marineState === "missing" && model.forecastState === "missing" && model.tideState === "missing") {
+      return {
+        status: 503,
+        type: HTML_TYPE,
+        cache: NO_STORE,
+        body: pages.renderUnavailable(ctx),
+        extra: { "Retry-After": "30" },
+        compress: true,
+      };
+    }
+    return {
+      status: 200,
+      type: HTML_TYPE,
+      cache: model.cacheable ? CACHE_PAGE : NO_STORE,
+      body: render(model, ctx),
+      compress: true,
+    };
+  }
+
+  function notFound(): Reply {
+    return { status: 404, type: HTML_TYPE, cache: NO_STORE, body: pages.renderNotFound(context()), compress: true };
+  }
+
+  return createServer((req, res) => {
+    void (async () => {
+      try {
+        await send(req, res, route(req));
+      } catch (err) {
+        // The client gets a plain page; the detail stays in the log.
+        const message = err instanceof Error ? err.message : String(err);
+        log(`[server] ${req.method ?? "?"} ${req.url ?? "?"} failed: ${message}`);
+        if (res.headersSent) {
+          res.destroy();
+          return;
+        }
+        try {
+          await send(req, res, {
+            status: 500,
+            type: "text/plain; charset=utf-8",
+            cache: NO_STORE,
+            body: "Something went wrong\n",
+          });
+        } catch (sendErr) {
+          log(`[server] could not send the 500 response: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`);
+          res.destroy();
+        }
+      }
+    })();
+  });
+}
