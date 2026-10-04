@@ -797,6 +797,15 @@ main {
   fill: var(--ink);
 }
 
+/* With the call hidden, the chart keeps its raw numbers but drops the band. */
+.nocall .chart .vb-good,
+.nocall .chart .vb-marg,
+.nocall .chart .vb-poor,
+.nocall .chart .vb-nodata,
+.nocall .chart .bandlabel {
+  display: none;
+}
+
 @media (max-width: 639px) {
   .chart text {
     font-size: 20px;
