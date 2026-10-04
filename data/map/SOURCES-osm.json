@@ -1,0 +1,14 @@
+[
+  {
+    "id": "osm",
+    "name": "OpenStreetMap",
+    "url": "https://www.openstreetmap.org/copyright",
+    "license": "ODbL 1.0",
+    "attribution": "© OpenStreetMap contributors",
+    "retrieved": "2026-10-04",
+    "version": "2026-10-04T04:13:36Z",
+    "surveyDates": null,
+    "verticalDatum": null,
+    "notes": "Jetties, piers, boardwalk and Beach street ends on Rockaway's ocean shore, queried from the Overpass API by scripts/map/build-shore.mjs. version is the Overpass osm3s.timestamp_osm_base of the extract. No man_made=pier reaches the ocean shore in this extract."
+  }
+]
