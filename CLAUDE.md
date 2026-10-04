@@ -10,6 +10,7 @@ A public, no-login surf forecast for Rockaway Beach, NYC. Node and TypeScript, s
 npm test              # vitest, one run
 npm run test:tz       # the suite under three host timezones; CI runs this
 npm run typecheck     # tsc --noEmit
+npm run test:e2e      # Playwright in Chromium; run npm run build first, it starts the servers from dist/
 npm run build         # tsc to dist/
 npm start             # node dist/index.js; needs assets/site.css, PORT/HOST/SITE_URL/VERDICT_LOG_DIR are optional
 npm run contract      # check the live upstreams; makes real network requests
