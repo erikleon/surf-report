@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 // Checks the committed map data built by scripts/map/build-bathymetry.sh.
 const DIR = join(import.meta.dirname, "..", "data", "map");
 
-const BOX = { west: -73.96, east: -73.76, south: 40.545, north: 40.605 };
+const BOX = { west: -73.97, east: -73.76, south: 40.525, north: 40.605 };
 // About 10 m, for coordinates that land on the box edge after rounding.
 const MARGIN = 0.0001;
 const DEPTHS_FT = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 30, 40, 50, 60];
@@ -89,8 +89,11 @@ describe("data/map/bathymetry.geojson", () => {
     for (const d of [2, 4, 6, 8, 10, 20]) expect(depths).toContain(d);
   });
 
-  it("stays under 600 KB", () => {
-    expect(statSync(join(DIR, "bathymetry.geojson")).size).toBeLessThan(600 * 1024);
+  // The box reaches the tip of Breezy Point, about a third more area than the
+  // first build, which was 565 KB. The interactive map downloads this file
+  // compressed, about a quarter of its size.
+  it("stays under 700 KB", () => {
+    expect(statSync(join(DIR, "bathymetry.geojson")).size).toBeLessThan(700 * 1024);
   });
 });
 

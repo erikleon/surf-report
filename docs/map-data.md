@@ -1,6 +1,6 @@
 # Map data: depth contours and land outline
 
-The nearshore map is drawn from two committed GeoJSON files in `data/map/`. The script `scripts/map/build-bathymetry.sh` builds both. They cover lon -73.96 to -73.76 and lat 40.545 to 40.605: the ocean side of the Rockaway Peninsula from Breezy Point to Beach 9th, about 2 km offshore, plus the Jamaica Bay side of the peninsula that falls inside the same box. Coordinates are WGS84 lon/lat with at most 6 decimals.
+The nearshore map is drawn from two committed GeoJSON files in `data/map/`. The script `scripts/map/build-bathymetry.sh` builds both. They cover lon -73.97 to -73.76 and lat 40.525 to 40.605: the ocean side of the Rockaway Peninsula from the tip of Breezy Point to Beach 9th, about 2 to 4 km offshore, plus the Jamaica Bay side of the peninsula that falls inside the same box. Coordinates are WGS84 lon/lat with at most 6 decimals.
 
 | File | Contents | Limit |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ The build is deterministic: the same pinned inputs give byte-identical files. To
 npm run build && node scripts/map/render-svg.mjs
 ```
 
-`tests/mapSvg.test.ts` renders the data again and fails when either committed file differs, so the two cannot drift. The map is turned 17 degrees so the beach runs across, covers Fort Tilden to about Beach 35th Street, and stays under 250 KB (about 44 KB now).
+`tests/mapSvg.test.ts` renders the data again and fails when either committed file differs, so the two cannot drift. The map is turned 17 degrees so the beach runs across, covers the tip of Breezy Point to about Beach 35th Street, and stays under 250 KB.
 
 ## Limits
 

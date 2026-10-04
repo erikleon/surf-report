@@ -17,9 +17,9 @@ set -euo pipefail
 
 # Output box (WGS84 lon/lat): Rockaway's ocean side, Beach 9th to Beach 149th,
 # plus about 2 km offshore.
-WEST=-73.96
+WEST=-73.97
 EAST=-73.76
-SOUTH=40.545
+SOUTH=40.525
 NORTH=40.605
 # Work on a slightly larger box so smoothing and contour lines do not bend at
 # the edges, then clip to the output box at the end.
