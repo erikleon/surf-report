@@ -26,11 +26,14 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Check the live upstreams
+        id: check
         # The default shell runs with pipefail, so the exit code of node
         # survives the pipe into tee.
         run: node dist/contract.js 2>&1 | tee contract-output.txt
       - name: Open an issue when the check failed
-        if: failure()
+        # Only when the check itself failed. A failed install or build is not
+        # an upstream change and should not open this issue.
+        if: failure() && steps.check.conclusion == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -54,4 +57,4 @@ jobs:
           if ! gh label list --json name --jq '.[].name' | grep -qx upstream; then
             gh label create upstream --description "Live upstream API changes"
           fi
-          gh issue create--title "$title" --label upstream --body-file issue-body.md
+          gh issue create --title "$title" --label upstream --body-file issue-body.md
