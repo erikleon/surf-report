@@ -62,7 +62,8 @@ const WIND_CLASS: Record<ReturnType<typeof windRelativeToBeach>, WindClass> = {
   "cross shore": "cross",
 };
 
-function dataCall(h: DataHour, lit: boolean): HourCall {
+/** The score for one lit or dark data hour, before the swell-only stars are added. */
+function scoreHour(h: DataHour, lit: boolean): Omit<HourCall, "swellStars"> {
   const rel = windRelativeToBeach(h.windDirection);
   const wind = WIND_CLASS[rel];
   const windText = `${Math.round(h.windSpeed)} mph ${rel}`;
@@ -89,12 +90,23 @@ function dataCall(h: DataHour, lit: boolean): HourCall {
 }
 
 /**
+ * The hour's score plus what the swell alone would earn: the same hour scored
+ * again with the wind dropped to calm. Calm wind can only help, so the swell
+ * stars are never below the real ones.
+ */
+function dataCall(h: DataHour, lit: boolean): HourCall {
+  const call = scoreHour(h, lit);
+  const swellStars = scoreHour({ ...h, windSpeed: 0 }, lit).stars;
+  return { ...call, swellStars };
+}
+
+/**
  * Score one hour. Daylight that cannot be determined (no sun times for that
  * day, or none passed) counts as lit, so a missing day never turns every hour
  * into "dark".
  */
 export function hourCall(hour: Hour, daylight: Daylight | undefined): HourCall {
-  if (hour.kind === "gap") return { kind: "nodata", stars: 0, why: "No forecast for this hour" };
+  if (hour.kind === "gap") return { kind: "nodata", stars: 0, swellStars: 0, why: "No forecast for this hour" };
   const lit = daylight === undefined ? true : isDaylight(hour.time, daylight) !== false;
   return dataCall(hour, lit);
 }

@@ -79,6 +79,12 @@ export interface HourCall {
   kind: CallKind;
   /** 0 to 5. Poor is 0 or 1, marginal 2 or 3, good 4 or 5, nodata 0. */
   stars: 0 | 1 | 2 | 3 | 4 | 5;
+  /**
+   * The stars this hour would score if the wind were calm: what the swell
+   * supports. Never below `stars`. The gap between the two is what the wind
+   * took away, drawn as faded stars.
+   */
+  swellStars: 0 | 1 | 2 | 3 | 4 | 5;
   /** The rule that produced the verdict, in words. */
   why: string;
   /** Present for a data hour: what the wind does to this beach. */
@@ -96,6 +102,8 @@ export interface DayVerdict {
   /** "none" when there is no data hour left to judge. */
   kind: CallKind | "none";
   stars: 0 | 1 | 2 | 3 | 4 | 5;
+  /** The best hour's stars with calm wind. See `HourCall.swellStars`. */
+  swellStars: 0 | 1 | 2 | 3 | 4 | 5;
   why: string;
   /** Local stamp of the hour the word, stars and reason came from. */
   bestHour?: string;

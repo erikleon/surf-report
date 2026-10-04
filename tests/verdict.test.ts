@@ -115,11 +115,21 @@ describe("dayVerdict", () => {
     expect(v.cells.map((c) => c.time)).toEqual(["2027-01-01T08:00", "2027-01-01T09:00"]);
   });
 
+  it("carries the best hour's swell stars so the headline can show what the wind took away", () => {
+    // Plenty of swell but 20 mph onshore all afternoon: poor, one star, five if the wind dropped.
+    const hours = [data("2026-10-03T14:00", { waveHeight: 3, wavePeriod: 9, ...POOR })];
+    const v = dayVerdict(hours, sun, "2026-10-03T12:00");
+    expect(v.word).toBe("Not today");
+    expect(v.stars).toBe(1);
+    expect(v.swellStars).toBe(5);
+  });
+
   it("returns no forecast with no hours at all", () => {
     expect(dayVerdict([], sun, "2026-10-03T10:00")).toEqual({
       word: "No forecast",
       kind: "none",
       stars: 0,
+      swellStars: 0,
       why: "No forecast for the remaining daylight hours",
       day: "tomorrow",
       cells: [],

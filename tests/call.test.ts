@@ -142,7 +142,7 @@ describe("hourCall gap hours", () => {
 
   it("returns nodata with no stars and no wind", () => {
     const c = hourCall(gap, sun);
-    expect(c).toEqual({ kind: "nodata", stars: 0, why: "No forecast for this hour" });
+    expect(c).toEqual({ kind: "nodata", stars: 0, swellStars: 0, why: "No forecast for this hour" });
     expect("wind" in c).toBe(false);
   });
 
@@ -252,5 +252,57 @@ describe("labels and classes", () => {
   it("never spends amber", () => {
     expect(CALL_CLASS).toEqual({ good: "good", marginal: "marg", poor: "poor", nodata: "nodata" });
     expect(Object.values(CALL_CLASS)).not.toContain("amber");
+  });
+});
+
+describe("swell stars", () => {
+  it("equals the real stars when the wind is clean", () => {
+    const c = hourCall(hour({ waveHeight: 3, wavePeriod: 9, windSpeed: 4, windDirection: OFFSHORE }), sun);
+    expect(c.kind).toBe("good");
+    expect(c.swellStars).toBe(c.stars);
+  });
+
+  it("shows what a blown-out hour would have scored with calm wind", () => {
+    // Plenty of swell, but 15 mph onshore ends the session: one star, five if the wind dropped.
+    const c = hourCall(hour({ waveHeight: 3, wavePeriod: 9, windSpeed: 15, windDirection: ONSHORE }), sun);
+    expect(c.kind).toBe("poor");
+    expect(c.stars).toBe(1);
+    expect(c.swellStars).toBe(5);
+  });
+
+  it("shows what moderate onshore wind took off a marginal hour", () => {
+    const c = hourCall(hour({ waveHeight: 2, wavePeriod: 8, windSpeed: 9, windDirection: ONSHORE }), sun);
+    expect(c.kind).toBe("marginal");
+    expect(c.stars).toBe(3);
+    expect(c.swellStars).toBe(4);
+  });
+
+  it("does not credit a swell that is too small or too short", () => {
+    const small = hourCall(hour({ waveHeight: 0.7, windSpeed: 20, windDirection: ONSHORE }), sun);
+    expect(small.swellStars).toBe(0);
+    const short = hourCall(hour({ waveHeight: 3, wavePeriod: 4, windSpeed: 0 }), sun);
+    expect(short.stars).toBe(2);
+    expect(short.swellStars).toBe(2);
+  });
+
+  it("is zero in the dark, whatever the swell", () => {
+    const c = hourCall(hour({ time: MIDNIGHT, waveHeight: 4, wavePeriod: 12 }), sun);
+    expect(c.stars).toBe(0);
+    expect(c.swellStars).toBe(0);
+  });
+
+  it("is never below the real stars across a grid of inputs", () => {
+    for (const waveHeight of [0.4, 0.9, 1.2, 1.6, 2.4, 3.2, 5]) {
+      for (const wavePeriod of [3, 5, 6, 7, 8, 10, 14]) {
+        for (const windSpeed of [0, 3, 6, 9, 12, 13, 20, 35]) {
+          for (const windDirection of [0, 45, 100, 190, 280]) {
+            for (const time of [NOON, MIDNIGHT]) {
+              const c = hourCall(hour({ time, waveHeight, wavePeriod, windSpeed, windDirection }), sun);
+              expect(c.swellStars).toBeGreaterThanOrEqual(c.stars);
+            }
+          }
+        }
+      }
+    }
   });
 });
