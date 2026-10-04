@@ -39,3 +39,30 @@ test("home with missing forecast hours", async ({ page }, info) => {
   await settle(page);
   await page.screenshot({ path: join(shotsDir, "home-nulls-phone-390-light.png"), fullPage: true });
 });
+
+// The map page waits for the interactive map to finish its first render, so
+// the capture shows the map rather than the static fallback underneath it.
+for (const scheme of ["light", "dark"] as const) {
+  test.describe(`map screenshot, ${scheme}`, () => {
+    test.use({ colorScheme: scheme });
+    test("map", async ({ page }, info) => {
+      test.skip(info.project.name === "phone-320", "phone-390 and desktop are the reference sizes");
+      mkdirSync(shotsDir, { recursive: true });
+      await page.goto("/map");
+      await page.locator(".map.map-ready").waitFor({ timeout: 45_000 });
+      await settle(page);
+      await page.waitForTimeout(1_500);
+      await page.screenshot({ path: join(shotsDir, `map-${info.project.name}-${scheme}.png`), fullPage: true });
+    });
+  });
+}
+
+test.describe("map screenshot without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+  test("map fallback", async ({ page }, info) => {
+    test.skip(info.project.name === "phone-320", "phone-390 and desktop are the reference sizes");
+    mkdirSync(shotsDir, { recursive: true });
+    await page.goto("/map");
+    await page.screenshot({ path: join(shotsDir, `map-nojs-${info.project.name}-light.png`), fullPage: true });
+  });
+});

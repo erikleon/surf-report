@@ -53,7 +53,7 @@ The route is `GET /healthz`. The image runs it every 30 seconds with the Node ru
 
 The server starts listening only after the first start-up fetch finishes or times out. Until then `/healthz` is not reachable. Once it answers, it returns 200 with `{"ok":true,"ready":true}`.
 
-The first start waits up to 10 seconds for the first upstream data. Any other health check, for example one in a load balancer, must allow about 12 seconds.
+The first start waits up to 10 seconds for the first upstream data. Any other health check, for example one in a load balancer, must allow about 15 seconds: on an idle machine the server is ready after about 10.2 seconds, and a busy host adds a few more.
 
 ```
 docker inspect --format '{{.State.Health.Status}}' surf-report

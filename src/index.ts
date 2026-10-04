@@ -45,7 +45,7 @@ export async function startServer(opts: StartOptions): Promise<Running> {
 
   // The first fetches start before the assets are read and compressed, so
   // that CPU work overlaps the network wait instead of adding to it. With the
-  // map files it takes most of a second, and the health check allows about 12.
+  // map files it takes a few hundred milliseconds, and the health check allows about 15.
   const started = cache.start();
 
   // A missing map file turns the map off with one log line; a missing core file stops the start.

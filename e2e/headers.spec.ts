@@ -39,7 +39,12 @@ test("hang: the first page is not cacheable", async ({ request }) => {
   expect(res.headers()["cache-control"]).toBe("no-store");
 });
 
-test("hang: a fresh server is ready within 12 seconds", async ({ request }) => {
+// The start waits at most 10 seconds for the first upstream data, so a server
+// whose upstreams hang is ready a little after 10 seconds: 10.2 s measured on
+// an idle machine. The limit is 15 s because this runs beside browsers drawing
+// WebGL in software, which slows a spawn by a few seconds. It still catches a
+// start that blocks well past the data wait.
+test("hang: a fresh server is ready within 15 seconds", async ({ request }) => {
   const started = Date.now();
   const child = spawn("node", ["e2e/serve.mjs"], {
     env: { ...process.env, SCENARIO: "hang", PORT: "4155", CONTROL_PORT: "4255" },
@@ -57,7 +62,7 @@ test("hang: a fresh server is ready within 12 seconds", async ({ request }) => {
     const took = Date.now() - started;
     console.log(`hang scenario ready after ${took} ms`);
     expect(ready).toBe(true);
-    expect(took).toBeLessThan(12_000);
+    expect(took).toBeLessThan(15_000);
     const res = await request.get("http://127.0.0.1:4155/", { maxRedirects: 0 });
     expect(res.headers()["cache-control"]).toBe("no-store");
   } finally {
