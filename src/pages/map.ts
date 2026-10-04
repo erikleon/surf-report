@@ -148,7 +148,8 @@ export function renderMap(model: SiteModel, ctx: PageContext): string {
   const body =
     `<h1 class="page-title">Nearshore map</h1>` +
     `<p class="lede">The bottom off Rockaway from Fort Tilden to about Beach 35th Street: depth lines, jetties, the boardwalk and street ends. ` +
-    `The wind is one forecast point for the whole beach. The depths come from surveys, not from today's bottom.</p>` +
+    `The moving wind is a forecast for a grid of points over the water off Rockaway, one hour at a time. ` +
+    `The depths come from surveys, not from today's bottom.</p>` +
     (m === undefined ? unavailable() : mapSection(m)) +
     windNow(model) +
     keySection() +

@@ -30,6 +30,11 @@ describe("map page with the map files", () => {
     expect(html).toContain("<title>Map - Rockaway surf report</title>");
   });
 
+  it("describes the wind as a grid over the water, not the one forecast point the waves use", () => {
+    expect(html).not.toContain("The wind is one forecast point");
+    expect(html).toContain("a grid of points over the water off Rockaway");
+  });
+
   it("marks Map as the current nav item", () => {
     const nav = html.split("<nav")[1]?.split("</nav>")[0] ?? "";
     expect(nav).toContain('<a href="/map" aria-current="page">Map</a>');
