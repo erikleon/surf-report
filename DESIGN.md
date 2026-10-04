@@ -62,7 +62,7 @@
 - **Now strip:** one row of four label-over-value columns divided by rules.
 - **Stale banner:** one line with an amber rule above it. Text only, no icon.
 - **Week table:** tabular numerals, 3-hour rows, rules between rows, foam banding on alternate days.
-- **Top nav:** three text items (Today, Week, About), underlined when current.
+- **Top nav:** four text items (Today, Week, Map, About), underlined when current.
 - **No cards.** Tappable rows keep 44px of vertical padding and underlined links, since there is no box to signal that they can be tapped.
 
 ## Local identity
@@ -99,10 +99,14 @@ Carried over from `oneeightsix`, where each one was learned the hard way.
 | 2026-10-03 | Stale text is ink with an amber rule and marker | Amber on light paper measured 2.54:1, below AA. Good and poor were also below AA on one background each and were adjusted. |
 | 2026-10-03 | The call is hidden when stale; no cards on the first screen; stars nest inside the three levels | /plan-design-review. See the plan file for the reasoning. |
 | 2026-10-03 | Preview page skipped | User chose to write the file directly. Type and contrast are unchecked on a real screen. |
+| 2026-10-04 | Maps: contour lines, not filled bands | The contours are open lines cut by the data box, the shore and survey gaps, so filled bands would be wrong in places. Lines are stroked in the sea-blue ramp (shallow light, deep dark), not ink, so depth still reads as a ramp. |
+| 2026-10-04 | Maps: the static map is turned 17 degrees | The shore runs about 17 degrees north of east. Turning the map lays the beach across with the ocean below, and a north arrow shows the turn. The frame runs from Fort Tilden to about Beach 35th; Breezy Point is left out to keep the surf zone readable. |
+| 2026-10-04 | Maps: street labels by a spacing rule | Beach 67th and 116th (the stretch ends) are tried first, then every tenth street; a label is kept only if its box stays 6 units clear of every kept label. Labels read "B90"; the legend says what that means. |
+| 2026-10-04 | Maps: fonts named, not loaded | An SVG in an `<img>` cannot load web fonts, so its text names Geist and Instrument Serif with Arial and Times fallbacks and stays short. The caption is repeated as HTML under the image. |
 
 ## Maps
-- **Not built yet.** The static nearshore map is Phase 1 and the interactive page is Phase 2. See the plan file before building either.
-- **Depth is a sequential ramp of the sea blue.** Shallow is foam, deep is the darkest sea blue. Contours are hairlines in ink at low opacity, labelled in feet in Geist. The datum (mean lower low water) is in the caption.
+- **The static nearshore map is built** (`assets/map/nearshore.svg`, drawn by `src/mapSvg.ts`). It is the `/map` page's content without JavaScript and the fallback for the interactive map.
+- **Depth is a sequential ramp of the sea blue.** Shallow is foam, deep is the darkest sea blue. Contours are hairlines stroked in that ramp (filled bands would be wrong where contours do not close), labelled in feet in Geist. The datum (mean lower low water) is in the caption.
 - **Always show the survey date and "not for navigation".** Sandbars move; the map is a snapshot and says so.
 - **No amber and no good/poor colours on a map.** Amber still means stale. A stale wind layer greys out and shows its as-of time.
 - **Wind arrows follow the chart's arrows:** length scales with speed, and every arrow set also carries its speed as text.
