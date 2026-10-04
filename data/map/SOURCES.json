@@ -1,0 +1,38 @@
+[
+  {
+    "id": "noaa-bluetopo",
+    "name": "NOAA BlueTopo (National Bathymetric Source)",
+    "url": "https://noaa-ocs-nationalbathymetry-pds.s3.amazonaws.com/index.html#BlueTopo/",
+    "license": "Public domain (U.S. Government work); contributor surveys are CC0-1.0 per the tile attribute tables",
+    "attribution": "NOAA Office of Coast Survey, National Bathymetric Source (BlueTopo)",
+    "retrieved": "2026-10-04",
+    "version": "Tile scheme BlueTopo_Tile_Scheme_20261001_163003; 4 m UTM 18N tiles BH4XD5FH, BH4XD5FJ, BH4XF5FH, BH4XF5FJ, BH4XG5FJ (20260831), BH4XG5FH (20260728), BH4XH5FH, BH4XH5FJ (20260713)",
+    "surveyDates": "Nearshore cells (0 to about 37 ft below MLLW, ocean side): 47% USGS multibeam E00998, 2023-05-06 to 2023-05-16; 18% NOAA H12604/H12891, 2013-09 to 2013-12; 17% NOAA H11710/H12138, 2009-10 to 2009-11; 9% USACE JALBTCX topobathy lidar, 2017-08 to 2017-09; about 8% other USACE and NOAA surveys 2014 to 2026-06; about 1% legacy chart data dated 1807 to 1950. Shares are from the Contributor band and its attribute table, sampled over the box.",
+    "verticalDatum": "NAVD88 (metres), converted by NOAA from the surveys' MLLW with VDatum 4.2 (region NYNJhbr34)",
+    "notes": "Used for all cells below the waterline. Elevation band 1 only. Read remotely with GDAL /vsicurl/ and warped with -novshift to NAD83 lon/lat, then labelled WGS84 (about 1 m difference, null transform EPSG:1188). Depth below MLLW = -(NAVD88 height) - 0.845 m; see noaa-vdatum. The tile files are replaced when NOAA adds surveys; a newer tile name means a newer version."
+  },
+  {
+    "id": "ncei-cudem-ninth",
+    "name": "NOAA NCEI Continuously Updated DEM (CUDEM), 1/9 arc-second topobathy",
+    "url": "https://noaa-nos-coastal-lidar-pds.s3.amazonaws.com/dem/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w074x00_2015v1.tif",
+    "license": "Public domain (U.S. Government work)",
+    "attribution": "NOAA National Centers for Environmental Information, CUDEM",
+    "retrieved": "2026-10-04",
+    "version": "ncei19_n40x75_w074x00_2015v1 (TIFFTAG_DATETIME 2015-10-20), NOAA Digital Coast dataset 8483, northeast_sandy region",
+    "surveyDates": "Unknown per cell: the tile has no source or date band. The 2015 tile was built from post-Hurricane Sandy topographic lidar and older hydrographic surveys, so the land surface is about 2014 or earlier.",
+    "verticalDatum": "NAVD88 (metres)",
+    "notes": "Used only where BlueTopo has no data, which in this box is the land above the waterline. It gives the land outline (above MHW) its landward part. Its seam with BlueTopo lies near the shoreline, so the beach edge of land.geojson can follow BlueTopo's coverage edge for a few metres. Not used for depth contours."
+  },
+  {
+    "id": "noaa-vdatum",
+    "name": "NOAA VDatum tidal datum conversion",
+    "url": "https://vdatum.noaa.gov/vdatumweb/api/convert?s_x=-73.86&s_y=40.57&s_z=0&s_h_frame=NAD83_2011&s_coor=geo&s_v_frame=NAVD88&s_v_unit=m&t_h_frame=NAD83_2011&t_v_frame=MLLW&t_v_unit=m&region=contiguous",
+    "license": "Public domain (U.S. Government work)",
+    "attribution": "NOAA National Ocean Service, VDatum",
+    "retrieved": "2026-10-04",
+    "version": "VDatum web API as served on 2026-10-04 (GEOID18 for NAVD88), tidal epoch 1983-2001",
+    "surveyDates": "Not applicable: a datum model, not a survey.",
+    "verticalDatum": "NAVD88 to MLLW and NAVD88 to MHW",
+    "notes": "At -73.86, 40.57 (mid-beach): NAVD88 0 m is 0.845 m (2.77 ft) above MLLW, uncertainty 0.064 m; MHW is 0.603 m (1.98 ft) above NAVD88. One constant is used over the box; from Beach 9th to Breezy Point the MLLW offset ranges 0.835 to 0.915 m, under 0.3 ft. Station 8517137 (Beach Channel, Jamaica Bay) was asked for first: the CO-OPS datagetter datums product is retired, and the mdapi datums endpoint lists MHW 23.36 ft and MLLW 17.71 ft above station datum (epoch 1983-2001) but no NAVD88 value, so it cannot give the NAVD88 offset. It is also on the bay side, where the tide range (MHW minus MLLW 5.65 ft) is larger than on the ocean beach (4.75 ft from VDatum)."
+  }
+]
