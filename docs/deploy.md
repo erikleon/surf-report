@@ -1,6 +1,6 @@
 # Deploy notes
 
-The app is one container. It serves https://surf.midwoodrathaus.fyi behind Cloudflare. The host is not chosen yet. Any machine that runs Docker and can reach the internet will work.
+The app is one container. It serves https://surf.midwoodrathaus.fyi behind Cloudflare. It runs on the home server, `mimir`, reached only through a Cloudflare Tunnel: the service and the tunnel are defined in the `homelab` repo's `stack/docker-compose.yml`, which routes the tunnel straight to this container on a network shared with nothing else. Any machine that runs Docker and can reach the internet would also work.
 
 ## Image
 
