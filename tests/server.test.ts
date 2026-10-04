@@ -162,7 +162,7 @@ describe("routes", () => {
     const base = await serve();
     const res = await get(base, "/nope");
     expect(res.status).toBe(404);
-    expect(await res.text()).toContain("Not found");
+    expect(await res.text()).toContain("Page not found");
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
