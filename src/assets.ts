@@ -121,7 +121,10 @@ function loadMapGroup(assetsDir: string, dataDir: string): MapGroup | { missing:
   const styleLight = read(assetsDir, "map/style-light.json");
   const styleDark = read(assetsDir, "map/style-dark.json");
   const staticSvg = read(assetsDir, "map/nearshore.svg");
-  const bathymetry = read(dataDir, "bathymetry.geojson");
+  // The ocean-side contours only: the full set includes Jamaica Bay, which
+  // crowds the map and is not where anyone surfs. scripts/map/render-svg.mjs
+  // writes this file with the same bay-side rule the static map uses.
+  const bathymetry = read(dataDir, "bathymetry-ocean.geojson");
   const land = read(dataDir, "land.geojson");
   const shore = read(dataDir, "shore.geojson");
 

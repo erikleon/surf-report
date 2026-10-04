@@ -29,7 +29,7 @@ export function mapFiles(): Record<string, string | Buffer> {
     "map/glyphs/Noto Sans Regular/8192-8447.pbf": "regular-8192",
     "map/glyphs/Noto Sans Medium/0-255.pbf": "medium-0",
     "map/glyphs/OFL.txt": "license",
-    "data:bathymetry.geojson": '{"type":"FeatureCollection","features":[],"name":"bathymetry"}',
+    "data:bathymetry-ocean.geojson": '{"type":"FeatureCollection","features":[],"name":"bathymetry"}',
     "data:land.geojson": '{"type":"FeatureCollection","features":[],"name":"land"}',
     "data:shore.geojson": '{"type":"FeatureCollection","features":[],"name":"shore"}',
   };

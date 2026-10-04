@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Draws assets/map/nearshore.svg, the static nearshore map, from the committed
-// data in data/map/, and writes src/mapFacts.ts, the facts the /map page lists
-// under the map. Run from the repo root after a build:
+// data in data/map/, writes src/mapFacts.ts, the facts the /map page lists
+// under the map, and writes data/map/bathymetry-ocean.geojson, the ocean-side
+// contours the interactive map loads. Run from the repo root after a build:
 //
 //   npm run build && node scripts/map/render-svg.mjs
 //
@@ -11,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { factsModule, nearshoreFacts, renderNearshoreSvg } from "../../dist/mapSvg.js";
+import { factsModule, nearshoreFacts, oceanSideBathymetry, renderNearshoreSvg } from "../../dist/mapSvg.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DATA = join(ROOT, "data", "map");
@@ -28,3 +29,7 @@ const svg = renderNearshoreSvg(input);
 writeFileSync(join(ROOT, "assets", "map", "nearshore.svg"), svg);
 writeFileSync(join(ROOT, "src", "mapFacts.ts"), factsModule(nearshoreFacts(input)));
 console.log(`assets/map/nearshore.svg: ${Buffer.byteLength(svg)} bytes`);
+
+const ocean = `${JSON.stringify(oceanSideBathymetry(input))}\n`;
+writeFileSync(join(DATA, "bathymetry-ocean.geojson"), ocean);
+console.log(`data/map/bathymetry-ocean.geojson: ${Buffer.byteLength(ocean)} bytes`);

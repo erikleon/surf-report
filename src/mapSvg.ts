@@ -640,6 +640,33 @@ function behindLand(run: Tenths[], rings: Tenths[][]): boolean {
   return behind >= 2;
 }
 
+/**
+ * The depth contours on the ocean side, for the interactive map. It applies
+ * the bay-side rule the static drawing uses to each whole line, in the same
+ * turned frame, so both maps agree on which lines are bay water. Lines that
+ * reach beyond the drawing are judged too, since the interactive map can pan.
+ */
+export function oceanSideBathymetry(
+  input: Pick<NearshoreInput, "land" | "bathymetry">,
+  frame: Frame = NEARSHORE_FRAME,
+): FeatureCollection {
+  const p = projector(frame);
+  const landRings = input.land.features
+    .flatMap((f) => polygons(f.geometry))
+    .flatMap((poly) => poly.map((ring) => ring.map((pos) => tenths(p, pos))));
+  const features: Feature[] = [];
+  for (const f of input.bathymetry.features) {
+    const kept = lines(f.geometry).filter(
+      (line) => line.length >= 2 && !behindLand(line.map((pos) => tenths(p, pos)), landRings),
+    );
+    if (kept.length === 0) continue;
+    const geometry: Geometry =
+      kept.length === 1 ? { type: "LineString", coordinates: kept[0] as Pos[] } : { type: "MultiLineString", coordinates: kept };
+    features.push({ type: "Feature", properties: f.properties, geometry });
+  }
+  return { type: "FeatureCollection", features };
+}
+
 /** Whether a straight line down from the point crosses any land outline. */
 function landBelow([px, py]: Tenths, rings: Tenths[][]): boolean {
   for (const ring of rings) {

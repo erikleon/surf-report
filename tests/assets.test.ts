@@ -179,7 +179,8 @@ describe("loadAssets map group", () => {
     expect(map.styleLight).toMatch(/^\/assets\/map\/style-light\.[0-9a-f]{8}\.json$/);
     expect(map.styleDark).toMatch(/^\/assets\/map\/style-dark\.[0-9a-f]{8}\.json$/);
     for (const name of ["bathymetry", "land", "shore"] as const) {
-      const source = mapFiles()[`data:${name}.geojson`] as string;
+      const file = name === "bathymetry" ? "bathymetry-ocean" : name;
+      const source = mapFiles()[`data:${file}.geojson`] as string;
       expect(map[name]).toBe(`/assets/map/data/${name}.${hash8(source)}.geojson`);
     }
   });
@@ -380,7 +381,7 @@ describe("loadAssets missing map files", () => {
       "style-light.json",
       "style-dark.json",
       "nearshore.svg",
-      "bathymetry.geojson",
+      "bathymetry-ocean.geojson",
       "land.geojson",
       "shore.geojson",
       "glyphs",

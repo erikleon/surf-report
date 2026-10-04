@@ -8,6 +8,7 @@ import {
   CAPTION_SNAPSHOT,
   LABEL_MIN_GAP,
   NEARSHORE_FRAME,
+  oceanSideBathymetry,
   factsModule,
   frameBounds,
   nearshoreFacts,
@@ -305,5 +306,47 @@ describe("the nearshore frame", () => {
     const svg = readFileSync(join("assets", "map", "nearshore.svg"), "utf8");
     expect(svg).toContain("Breezy Point");
     expect(svg).toContain(">B90<");
+  });
+});
+
+describe("oceanSideBathymetry", () => {
+  // A beach running east-west at lat 40.57 with the ocean south of it and a
+  // bay north of it, inside the default frame.
+  const land = {
+    type: "FeatureCollection" as const,
+    features: [
+      {
+        type: "Feature" as const,
+        properties: { kind: "land" },
+        geometry: {
+          type: "Polygon" as const,
+          coordinates: [[[-73.9, 40.568], [-73.8, 40.568], [-73.8, 40.574], [-73.9, 40.574], [-73.9, 40.568]]],
+        },
+      },
+    ],
+  };
+  const line = (lat: number): number[][] => [[-73.89, lat], [-73.85, lat], [-73.81, lat]];
+
+  it("keeps a line in the ocean and drops one in the bay behind the land", () => {
+    const out = oceanSideBathymetry({
+      land,
+      bathymetry: {
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: { depthFt: 10 }, geometry: { type: "MultiLineString", coordinates: [line(40.564), line(40.58)] } },
+          { type: "Feature", properties: { depthFt: 20 }, geometry: { type: "LineString", coordinates: line(40.585) } },
+        ],
+      },
+    });
+    // The 10 ft feature keeps only its ocean line; the 20 ft bay line is gone.
+    expect(out.features).toHaveLength(1);
+    expect(out.features[0]?.properties).toEqual({ depthFt: 10 });
+    expect(out.features[0]?.geometry).toEqual({ type: "LineString", coordinates: line(40.564) });
+  });
+
+  it("matches the committed file, so the interactive map and the static map agree", () => {
+    const read = (name: string) => JSON.parse(readFileSync(join("data", "map", name), "utf8"));
+    const fresh = `${JSON.stringify(oceanSideBathymetry({ land: read("land.geojson"), bathymetry: read("bathymetry.geojson") }))}\n`;
+    expect(readFileSync(join("data", "map", "bathymetry-ocean.geojson"), "utf8")).toBe(fresh);
   });
 });

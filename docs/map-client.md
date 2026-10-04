@@ -98,7 +98,7 @@ The server reads every map file once at start (`src/assets.ts`) and hands the pa
 | `client` | `/assets/map.<h>.js` (from `assets/map.js`) | `text/javascript` |
 | `styleLight`, `styleDark` | `/assets/map/style-light.<h>.json`, `/assets/map/style-dark.<h>.json` | `application/json` |
 | `staticSvg` | `/assets/map/nearshore.<h>.svg` | `image/svg+xml` |
-| `bathymetry`, `land`, `shore` | `/assets/map/data/<name>.<h>.geojson` (from `data/map/`) | `application/geo+json` |
+| `bathymetry`, `land`, `shore` | `/assets/map/data/<name>.<h>.geojson` (from `data/map/`; `bathymetry` is served from `bathymetry-ocean.geojson`, the ocean-side contours) | `application/geo+json` |
 | `wind` | `/data/wind.json`, live, not hashed | `application/json` |
 | (in the styles) | `/assets/map/basemap.<h>.pmtiles` | `application/octet-stream`, Range, never compressed |
 | (in the styles) | `/assets/map/glyphs.<h>/<font>/<range>.pbf` | `application/x-protobuf`, not compressed |
