@@ -1,7 +1,7 @@
 // How old is too old. All times are epoch milliseconds.
 
 /** How often each upstream is refetched. */
-export const REFRESH_MS = { marine: 900_000, forecast: 900_000, tides: 3_600_000 } as const;
+export const REFRESH_MS = { marine: 900_000, forecast: 900_000, tides: 3_600_000, wind: 3_600_000 } as const;
 
 /** How long the edge cache may keep a page. A page can be this much older than the data behind it. */
 export const EDGE_TTL_MS = 120_000;
@@ -17,6 +17,9 @@ export const RAW_STALE_AFTER_MS = REFRESH_MS.marine + EDGE_TTL_MS;
 
 /** Tides change slowly and the predictions run days ahead, so they get a long window. */
 export const TIDE_STALE_AFTER_MS = 6 * 3_600_000;
+
+/** Age at which the wind map greys out: two missed wind refreshes plus the edge TTL. */
+export const WIND_STALE_AFTER_MS = 2 * REFRESH_MS.wind + EDGE_TTL_MS;
 
 export type AgeState = "fresh" | "stale" | "missing";
 

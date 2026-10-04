@@ -5,16 +5,18 @@ import {
   RAW_STALE_AFTER_MS,
   REFRESH_MS,
   TIDE_STALE_AFTER_MS,
+  WIND_STALE_AFTER_MS,
   ageState,
 } from "../src/freshness.js";
 
 describe("constants", () => {
   it("have the documented values", () => {
-    expect(REFRESH_MS).toEqual({ marine: 900_000, forecast: 900_000, tides: 3_600_000 });
+    expect(REFRESH_MS).toEqual({ marine: 900_000, forecast: 900_000, tides: 3_600_000, wind: 3_600_000 });
     expect(EDGE_TTL_MS).toBe(120_000);
     expect(CALL_STALE_AFTER_MS).toBe(32 * 60_000);
     expect(RAW_STALE_AFTER_MS).toBe(17 * 60_000);
     expect(TIDE_STALE_AFTER_MS).toBe(6 * 3_600_000);
+    expect(WIND_STALE_AFTER_MS).toBe(122 * 60_000);
   });
 });
 
