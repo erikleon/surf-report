@@ -174,7 +174,7 @@ describe("loadAssets map group", () => {
     expect(map.maplibre).toMatch(/^\/assets\/vendor\/maplibre-gl\.[0-9a-f]{8}\/maplibre-gl\.mjs$/);
     expect(map.maplibreCss).toBe(`/assets/vendor/maplibre-gl.${hash8(".maplibregl-map{overflow:hidden}")}.css`);
     expect(map.pmtiles).toBe(`/assets/vendor/pmtiles.${hash8("var pmtiles = {};")}.js`);
-    expect(map.client).toBe(`/assets/map.${hash8("console.log('map');")}.js`);
+    expect(map.client).toMatch(/^\/assets\/map-client\.[0-9a-f]{8}\/map\.js$/);
     expect(map.staticSvg).toMatch(/^\/assets\/map\/nearshore\.[0-9a-f]{8}\.svg$/);
     expect(map.styleLight).toMatch(/^\/assets\/map\/style-light\.[0-9a-f]{8}\.json$/);
     expect(map.styleDark).toMatch(/^\/assets\/map\/style-dark\.[0-9a-f]{8}\.json$/);
@@ -192,6 +192,23 @@ describe("loadAssets map group", () => {
       expect(asset?.body.toString()).toBe(mapFiles()[`vendor/maplibre-gl/${name}`]);
       expect(asset?.type).toBe("text/javascript; charset=utf-8");
     }
+  });
+
+  it("serves map.js and wind.js from one folder so map.js's relative import resolves", () => {
+    const assets = loadAssets(makeMapDir());
+    const client = mapOf(assets).client;
+    const folder = client.replace(/\/map\.js$/, "");
+    // The URL the browser computes for `import "./wind.js"` inside map.js.
+    const windUrl = new URL("./wind.js", `https://surf.example${client}`).pathname;
+    expect(windUrl).toBe(`${folder}/wind.js`);
+    expect(assets.lookup(windUrl)?.body.toString()).toBe(mapFiles()["wind.js"]);
+    expect(assets.lookup(windUrl)?.type).toBe("text/javascript; charset=utf-8");
+  });
+
+  it.each(["map.js", "wind.js"])("changes the client folder when %s changes", (name) => {
+    const a = mapOf(loadAssets(makeMapDir())).client;
+    const b = mapOf(loadAssets(makeMapDir({ [name]: "export const changed = 1;" }))).client;
+    expect(a).not.toBe(b);
   });
 
   it.each(MODULES)("changes the module folder when %s changes", (name) => {
@@ -358,6 +375,7 @@ describe("loadAssets missing map files", () => {
       "maplibre-gl.css",
       "pmtiles.js",
       "map.js",
+      "wind.js",
       "basemap.pmtiles",
       "style-light.json",
       "style-dark.json",

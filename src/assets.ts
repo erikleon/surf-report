@@ -46,6 +46,9 @@ export const WIND_URL = "/data/wind.json";
 /** The MapLibre files that import each other by relative name, so they share one folder. */
 const MAPLIBRE_MODULES = ["maplibre-gl.mjs", "maplibre-gl-shared.mjs", "maplibre-gl-worker.mjs"] as const;
 
+/** Our map client modules. map.js imports ./wind.js, so they share one folder too. */
+const CLIENT_MODULES = ["map.js", "wind.js"] as const;
+
 function readSource(dir: string, name: string): Buffer {
   const path = join(dir, name);
   try {
@@ -113,7 +116,7 @@ function loadMapGroup(assetsDir: string, dataDir: string): MapGroup | { missing:
   const modules = MAPLIBRE_MODULES.map((name) => [name, read(join(assetsDir, "vendor/maplibre-gl"), name)] as const);
   const maplibreCss = read(join(assetsDir, "vendor/maplibre-gl"), "maplibre-gl.css");
   const pmtiles = read(join(assetsDir, "vendor/pmtiles"), "pmtiles.js");
-  const client = read(assetsDir, "map.js");
+  const clientModules = CLIENT_MODULES.map((name) => [name, read(assetsDir, name)] as const);
   const basemap = read(assetsDir, "map/basemap.pmtiles");
   const styleLight = read(assetsDir, "map/style-light.json");
   const styleDark = read(assetsDir, "map/style-dark.json");
@@ -146,7 +149,6 @@ function loadMapGroup(assetsDir: string, dataDir: string): MapGroup | { missing:
     missing.length > 0 ||
     maplibreCss === undefined ||
     pmtiles === undefined ||
-    client === undefined ||
     basemap === undefined ||
     styleLight === undefined ||
     styleDark === undefined ||
@@ -168,6 +170,13 @@ function loadMapGroup(assetsDir: string, dataDir: string): MapGroup | { missing:
   const moduleFiles: Array<[string, Buffer]> = [];
   for (const [name, body] of modules) if (body !== undefined) moduleFiles.push([name, body]);
   const maplibreDir = `/assets/vendor/maplibre-gl.${hashOfFiles(moduleFiles)}`;
+
+  // The same for our client: map.js and wind.js under one hash over both, so the
+  // relative import resolves and a change to either gives a new folder.
+  const clientFiles: Array<[string, Buffer]> = [];
+  for (const [name, body] of clientModules) if (body !== undefined) clientFiles.push([name, body]);
+  const clientDir = `/assets/map-client.${hashOfFiles(clientFiles)}`;
+  for (const [name, body] of clientFiles) add(`${clientDir}/${name}`, body, JS_TYPE, true);
   for (const [name, body] of moduleFiles) add(`${maplibreDir}/${name}`, body, JS_TYPE, true);
 
   // Sort so the folder hash does not depend on the order readdir returns.
@@ -192,7 +201,7 @@ function loadMapGroup(assetsDir: string, dataDir: string): MapGroup | { missing:
     maplibre: `${maplibreDir}/maplibre-gl.mjs`,
     maplibreCss: add(`/assets/vendor/maplibre-gl.${hashOf(maplibreCss)}.css`, maplibreCss, "text/css; charset=utf-8", true),
     pmtiles: add(`/assets/vendor/pmtiles.${hashOf(pmtiles)}.js`, pmtiles, JS_TYPE, true),
-    client: add(`/assets/map.${hashOf(client)}.js`, client, JS_TYPE, true),
+    client: `${clientDir}/map.js`,
     styleLight: style("style-light", styleLight),
     styleDark: style("style-dark", styleDark),
     staticSvg: add(`/assets/map/nearshore.${hashOf(staticSvg)}.svg`, staticSvg, "image/svg+xml", true),
