@@ -5,7 +5,8 @@ import { settle } from "./helpers";
 //
 // Headless Chromium draws WebGL in software, which is slow, so these run one
 // after another within each project and allow 45 seconds for the first render.
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 90_000 });
+// The whole test has to outlast the wait for the first render.
 const READY = { timeout: 45_000 };
 
 test.describe("map page", () => {

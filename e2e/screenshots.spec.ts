@@ -47,6 +47,8 @@ for (const scheme of ["light", "dark"] as const) {
     test.use({ colorScheme: scheme });
     test("map", async ({ page }, info) => {
       test.skip(info.project.name === "phone-320", "phone-390 and desktop are the reference sizes");
+      // Longer than the 45 second wait for the first render below.
+      test.setTimeout(90_000);
       mkdirSync(shotsDir, { recursive: true });
       await page.goto("/map");
       await page.locator(".map.map-ready").waitFor({ timeout: 45_000 });
