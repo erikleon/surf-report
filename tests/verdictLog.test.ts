@@ -145,4 +145,32 @@ describe("attachVerdictLog", () => {
     cache.fire("marine", true);
     expect(recorded).toEqual([cache.snapshot()]);
   });
+
+  it("reports an unexpected failure on stderr instead of leaving an unhandled rejection", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const errors: string[] = [];
+      const cache = fakeCache();
+      attachVerdictLog(
+        cache,
+        {
+          record: async () => {
+            throw new TypeError("boom");
+          },
+        },
+        (line) => void errors.push(line),
+      );
+      cache.fire("marine", true);
+      // Let the rejected promise settle and any unhandled-rejection event fire.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("[verdict-log] unexpected failure");
+      expect(errors[0]).toContain("boom");
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
 });

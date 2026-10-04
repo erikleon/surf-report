@@ -65,8 +65,18 @@ export function createVerdictLog(opts: VerdictLogOptions): VerdictLog {
 }
 
 /** Record a verdict after every successful marine refresh. */
-export function attachVerdictLog(cache: Pick<Cache, "snapshot" | "setOnRefresh">, log: VerdictLog): void {
+export function attachVerdictLog(
+  cache: Pick<Cache, "snapshot" | "setOnRefresh">,
+  log: VerdictLog,
+  logError: (line: string) => void = (line) => void process.stderr.write(`${line}\n`),
+): void {
   cache.setOnRefresh((name, result) => {
-    if (name === "marine" && result.ok) void log.record(cache.snapshot());
+    if (name !== "marine" || !result.ok) return;
+    // Fire and forget: nothing waits on the log. A bug in it is reported on
+    // stderr and must not become an unhandled rejection, which would stop the
+    // whole server over a record that only exists for tuning.
+    log.record(cache.snapshot()).catch((err: unknown) => {
+      logError(`[verdict-log] unexpected failure: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    });
   });
 }
