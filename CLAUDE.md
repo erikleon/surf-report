@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A public, no-login surf forecast for Rockaway Beach, NYC. Node and TypeScript, server-rendered, no client framework. The repository is a scaffold: the server, the upstream fetchers and the pages are not written yet.
+A public, no-login surf forecast for Rockaway Beach, NYC. Node and TypeScript, server-rendered, no client framework. The server (`src/server.ts`), config and asset loading are in place; `src/index.ts` is the entry point.
 
 ## Commands
 
@@ -11,7 +11,7 @@ npm test              # vitest, one run
 npm run test:tz       # the suite under three host timezones; CI runs this
 npm run typecheck     # tsc --noEmit
 npm run build         # tsc to dist/
-npm start             # node dist/index.js
+npm start             # node dist/index.js; needs assets/site.css, PORT/HOST/SITE_URL/VERDICT_LOG_DIR are optional
 npm run contract      # check the live upstreams; makes real network requests
 docker build -t surf-report:test .   # build the container image locally
 ```

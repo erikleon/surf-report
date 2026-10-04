@@ -13,9 +13,9 @@ To build locally: `docker build -t surf-report:test .`
 | Name | Default in image | Meaning |
 | --- | --- | --- |
 | `PORT` | `8080` | TCP port the server listens on. |
-| `HOST` | `0.0.0.0` | Address the server binds to. |
-| `VERDICT_LOG_DIR` | `/data` | Directory for the verdict log files. |
-| `SITE_URL` | none | Public address of the site, for example `https://surf.midwoodrathaus.fyi`. Used for absolute links. |
+| `HOST` | `0.0.0.0` | Address the server binds to. Outside the image the default is `127.0.0.1`. |
+| `VERDICT_LOG_DIR` | `/data` | Directory for the verdict log files. Outside the image the default is `./data`. |
+| `SITE_URL` | `https://surf.midwoodrathaus.fyi` | Public address of the site: an http or https origin with no path. Used for absolute links. |
 
 ## Run it
 
@@ -51,6 +51,8 @@ The container runs as the `node` user. A new named volume takes the ownership of
 
 The route is `GET /healthz`. The image runs it every 30 seconds with the Node runtime (the image has no curl). The start period is 20 seconds and 3 failures mark the container unhealthy.
 
+The server starts listening only after the first start-up fetch finishes or times out. Until then `/healthz` is not reachable. Once it answers, it returns 200 with `{"ok":true,"ready":true}`.
+
 The first start waits up to 10 seconds for the first upstream data. Any other health check, for example one in a load balancer, must allow about 12 seconds.
 
 ```
@@ -70,8 +72,12 @@ For `surf.midwoodrathaus.fyi`:
 
 - Complete pages: `Cache-Control: public, max-age=0, s-maxage=120`. The browser always revalidates. Cloudflare keeps the page for 2 minutes.
 - Loading, partial and error pages: `Cache-Control: no-store`.
-- A strict `Content-Security-Policy` on every page.
+- A strict `Content-Security-Policy` on every response.
+- Static files under `/assets/` use `Cache-Control: public, max-age=31536000, immutable`. Their file names contain a content hash.
+- A page URL with a trailing slash or a query string gets a 301 to the plain path, so cache-busting URLs do not skip the edge cache.
+- When no upstream has ever loaded, pages answer 503 with `Retry-After: 30`.
 - No cookies. There must be no `Set-Cookie` header.
+- A bad `PORT` or `SITE_URL` stops the process at start with a message that names the variable.
 
 Check them with:
 
