@@ -13,13 +13,19 @@ import { buildForecastUrl } from "../src/upstream/forecast.js";
 import { buildMarineUrl } from "../src/upstream/marine.js";
 import { buildTidesUrl } from "../src/upstream/tides.js";
 import { buildWindGridUrl } from "../src/upstream/windGrid.js";
-import { createApp, type Pages } from "../src/server.js";
+import { createApp, parseRange, type Pages } from "../src/server.js";
+import { WIND_STALE_AFTER_MS } from "../src/freshness.js";
+import { toWindJson, windView } from "../src/windField.js";
+import { BASEMAP, writeMapGroup } from "./mapFixture.js";
 import { fakeFetch } from "./upstream/fakeFetch.js";
 
 const NOW = Date.UTC(2026, 9, 3, 14, 0);
 const CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; " +
   "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const MAP_CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; " +
+  "connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 const goodRoutes = {
   [buildMarineUrl()]: { file: "marine.json" },
@@ -30,7 +36,7 @@ const goodRoutes = {
 
 async function freshSnapshot(): Promise<CacheSnapshot> {
   const cache = createCache({ fetchImpl: fakeFetch(goodRoutes), now: () => NOW, log: () => undefined });
-  for (const name of ["marine", "forecast", "tides"] as const) await cache.refresh(name);
+  for (const name of ["marine", "forecast", "tides", "wind"] as const) await cache.refresh(name);
   return cache.snapshot();
 }
 
@@ -64,12 +70,23 @@ afterEach(async () => {
   }
 });
 
+const BIG_CSS = "@font-face{src:url(__FONT_GEIST__)}body{color:#000}".repeat(80);
+
+/** Assets without the map group, as when a map file is missing. */
 let assets: Assets;
+/** Assets with the whole map group. */
+let mapAssets: Assets;
 beforeAll(() => {
-  assets = loadAssets(makeAssetDir("@font-face{src:url(__FONT_GEIST__)}body{color:#000}".repeat(80)));
+  const plainDir = makeAssetDir(BIG_CSS);
+  assets = loadAssets(plainDir, { log: () => undefined, mapDataDir: join(plainDir, "data") });
+  const mapDir = makeAssetDir(BIG_CSS);
+  writeMapGroup(mapDir, join(mapDir, "data"));
+  mapAssets = loadAssets(mapDir, { mapDataDir: join(mapDir, "data") });
+  if (mapAssets.urls.map === undefined) throw new Error("the map group did not load");
 });
 
 interface Options {
+  assets?: Assets;
   snapshot?: CacheSnapshot;
   now?: number;
   ready?: () => boolean;
@@ -81,7 +98,7 @@ async function serve(opts: Options = {}): Promise<string> {
   const snapshot = opts.snapshot ?? (await freshSnapshot());
   const server = createApp({
     cache: { snapshot: () => snapshot },
-    assets,
+    assets: opts.assets ?? assets,
     siteUrl: "https://surf.example",
     now: () => opts.now ?? NOW,
     isReady: opts.ready ?? (() => true),
@@ -100,12 +117,19 @@ interface Raw {
 }
 
 /** A request that leaves the body compressed, so the tests can see the real bytes. */
-function raw(base: string, path: string, init: { method?: string; encoding?: string } = {}): Promise<Raw> {
+function raw(
+  base: string,
+  path: string,
+  init: { method?: string; encoding?: string; range?: string } = {},
+): Promise<Raw> {
   return new Promise((resolve, reject) => {
     // Pass the path as written: a URL string would collapse "/assets/../x" before sending.
     const { port } = new URL(base);
+    const headers: Record<string, string> = {};
+    if (init.encoding !== undefined) headers["Accept-Encoding"] = init.encoding;
+    if (init.range !== undefined) headers["Range"] = init.range;
     const req = request(
-      { host: "127.0.0.1", port, path, method: init.method ?? "GET", headers: init.encoding === undefined ? {} : { "Accept-Encoding": init.encoding } },
+      { host: "127.0.0.1", port, path, method: init.method ?? "GET", headers },
       (res) => {
         const chunks: Buffer[] = [];
         res.on("data", (c: Buffer) => chunks.push(c));
@@ -125,6 +149,7 @@ const bigPages = (size: number): Pages => {
     renderHome: () => html,
     renderWeek: () => html,
     renderAbout: () => html,
+    renderMap: () => html,
     renderNotFound: () => html,
     renderUnavailable: () => html,
   };
@@ -513,6 +538,277 @@ describe("render errors", () => {
   });
 });
 
+// ---- the map page ----
+
+describe("/map", () => {
+  it("renders the map page with the map CSP and the page cache rule", async () => {
+    const seen: unknown[] = [];
+    const pages: Pages = {
+      ...bigPages(1),
+      renderMap: (model, ctx) => {
+        seen.push(model.callState, ctx);
+        return "<p>map</p>";
+      },
+    };
+    const base = await serve({ assets: mapAssets, pages });
+    const res = await get(base, "/map");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<p>map</p>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("content-security-policy")).toBe(MAP_CSP);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120");
+    expect(res.headers.has("set-cookie")).toBe(false);
+    expect(seen[0]).toBe("ok");
+    expect(seen[1]).toEqual({ nowMs: NOW, siteUrl: "https://surf.example", assets: mapAssets.urls });
+  });
+
+  it("keeps the site CSP on every other page when the map is on", async () => {
+    const base = await serve({ assets: mapAssets });
+    for (const path of ["/", "/week", "/about", "/nope", mapAssets.urls.map!.client, "/data/wind.json"]) {
+      expect((await get(base, path)).headers.get("content-security-policy"), path).toBe(CSP);
+    }
+  });
+
+  it("uses no-store when the forecast is incomplete, like the other pages", async () => {
+    const snapshot = await freshSnapshot();
+    const base = await serve({ assets: mapAssets, snapshot: { ...snapshot, tides: {} } });
+    const res = await get(base, "/map");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("answers 503 when no upstream has ever loaded", async () => {
+    const base = await serve({ assets: mapAssets, snapshot: emptySnapshot() });
+    const res = await get(base, "/map");
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("30");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("answers 503 no-store when the map files are missing, and the forecast pages still answer 200", async () => {
+    const base = await serve({ assets });
+    const res = await get(base, "/map");
+    expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("content-security-policy")).toBe(CSP);
+    expect(await res.text()).toContain("Forecast unavailable");
+    for (const path of ["/", "/week", "/about"]) expect((await get(base, path)).status, path).toBe(200);
+  });
+
+  it.each([
+    ["/map/", "/map"],
+    ["/map?x=1", "/map"],
+    ["/map/?a=1&b=2", "/map"],
+  ])("sends %s to %s with a 301", async (from, to) => {
+    for (const a of [mapAssets, assets]) {
+      const base = await serve({ assets: a });
+      const res = await get(base, from);
+      expect(res.status).toBe(301);
+      expect(res.headers.get("location")).toBe(to);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  it("serves every map asset with the immutable cache header and no cookie", async () => {
+    const base = await serve({ assets: mapAssets });
+    for (const [key, url] of Object.entries(mapAssets.urls.map!)) {
+      if (key === "wind") continue;
+      const res = await get(base, url);
+      expect(res.status, key).toBe(200);
+      expect(res.headers.get("cache-control"), key).toBe("public, max-age=31536000, immutable");
+      expect(res.headers.has("set-cookie"), key).toBe(false);
+    }
+  });
+
+  it("serves a glyph range by its encoded font name and 404s a missing one", async () => {
+    const base = await serve({ assets: mapAssets });
+    const style = mapAssets.lookup(mapAssets.urls.map!.styleLight)!.body.toString();
+    const glyphs = /"glyphs":"([^"]+)\/\{fontstack\}/.exec(style)![1]!;
+    const res = await raw(base, `${glyphs}/Noto%20Sans%20Regular/0-255.pbf`, { encoding: "br, gzip" });
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/x-protobuf");
+    expect(res.headers["content-encoding"]).toBeUndefined();
+    expect(res.body.toString()).toBe("regular-0");
+    expect((await raw(base, `${glyphs}/Noto%20Sans%20Medium/8192-8447.pbf`)).status).toBe(404);
+    expect((await raw(base, `${glyphs}/Noto%20Sans%20Regular/../../../package.json`)).status).toBe(404);
+    expect((await raw(base, `${glyphs}/..%2f..%2f..%2fpackage.json`)).status).toBe(404);
+  });
+
+  it("sends the MapLibre modules as JavaScript with brotli", async () => {
+    const base = await serve({ assets: mapAssets });
+    const folder = mapAssets.urls.map!.maplibre.replace(/\/[^/]+$/, "");
+    for (const name of ["maplibre-gl.mjs", "maplibre-gl-shared.mjs", "maplibre-gl-worker.mjs"]) {
+      const res = await raw(base, `${folder}/${name}`, { encoding: "br" });
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toBe("text/javascript; charset=utf-8");
+      expect(res.headers["content-encoding"]).toBe("br");
+    }
+  });
+});
+
+// ---- basemap byte ranges ----
+
+describe("basemap ranges", () => {
+  const basemapUrl = (): string => {
+    const style = mapAssets.lookup(mapAssets.urls.map!.styleLight)!.body.toString();
+    return /"pmtiles:\/\/([^"]+)"/.exec(style)![1]!;
+  };
+  const size = BASEMAP.length;
+
+  it("sends the whole file with Accept-Ranges when there is no Range header", async () => {
+    const base = await serve({ assets: mapAssets });
+    const res = await raw(base, basemapUrl());
+    expect(res.status).toBe(200);
+    expect(res.headers["accept-ranges"]).toBe("bytes");
+    expect(res.headers["content-type"]).toBe("application/octet-stream");
+    expect(res.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+    expect(res.body).toEqual(BASEMAP);
+  });
+
+  it.each([
+    ["bytes=0-99", 0, 99],
+    ["bytes=100-199", 100, 199],
+    ["bytes=990-5000", 990, size - 1],
+    ["bytes=500-", 500, size - 1],
+    ["bytes=-10", size - 10, size - 1],
+    ["bytes=-5000", 0, size - 1],
+    ["bytes=999-999", 999, 999],
+  ])("answers %s with 206 and the exact bytes", async (range, start, end) => {
+    const base = await serve({ assets: mapAssets });
+    const res = await raw(base, basemapUrl(), { range });
+    expect(res.status).toBe(206);
+    expect(res.headers["content-range"]).toBe(`bytes ${start}-${end}/${size}`);
+    expect(res.headers["accept-ranges"]).toBe("bytes");
+    expect(res.headers["content-length"]).toBe(String(end - start + 1));
+    expect(res.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
+    expect(res.body).toEqual(BASEMAP.subarray(start, end + 1));
+  });
+
+  it.each(["bytes=1000-", "bytes=5000-6000", "bytes=-0"])("answers %s with 416", async (range) => {
+    const base = await serve({ assets: mapAssets });
+    const res = await raw(base, basemapUrl(), { range });
+    expect(res.status).toBe(416);
+    expect(res.headers["content-range"]).toBe(`bytes */${size}`);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.body.length).toBe(0);
+  });
+
+  it.each(["bytes=0-9,20-29", "bytes=0-9, 50-", "items=0-9", "bytes=9-0", "bytes=abc", "bytes=-"])(
+    "sends the whole file with 200 for %s",
+    async (range) => {
+      const base = await serve({ assets: mapAssets });
+      const res = await raw(base, basemapUrl(), { range });
+      expect(res.status).toBe(200);
+      expect(res.headers["content-range"]).toBeUndefined();
+      expect(res.body).toEqual(BASEMAP);
+    },
+  );
+
+  it("answers HEAD with the range headers and no body", async () => {
+    const base = await serve({ assets: mapAssets });
+    const full = await raw(base, basemapUrl(), { method: "HEAD" });
+    expect(full.status).toBe(200);
+    expect(full.headers["content-length"]).toBe(String(size));
+    expect(full.headers["accept-ranges"]).toBe("bytes");
+    expect(full.body.length).toBe(0);
+    const part = await raw(base, basemapUrl(), { method: "HEAD", range: "bytes=0-15" });
+    expect(part.status).toBe(206);
+    expect(part.headers["content-length"]).toBe("16");
+    expect(part.headers["content-range"]).toBe(`bytes 0-15/${size}`);
+    expect(part.body.length).toBe(0);
+  });
+
+  it("never compresses the basemap, even when the client accepts brotli", async () => {
+    const base = await serve({ assets: mapAssets });
+    for (const range of [undefined, "bytes=0-99"]) {
+      const res = await raw(base, basemapUrl(), { encoding: "br, gzip", ...(range ? { range } : {}) });
+      expect(res.headers["content-encoding"]).toBeUndefined();
+      expect(res.headers["vary"]).toBeUndefined();
+    }
+  });
+
+  it("ignores Range on other assets", async () => {
+    const base = await serve({ assets: mapAssets });
+    const js = await raw(base, mapAssets.urls.js, { range: "bytes=0-1" });
+    expect(js.status).toBe(200);
+    expect(js.headers["accept-ranges"]).toBeUndefined();
+  });
+
+  it("parses large numbers without losing the range", () => {
+    expect(parseRange("bytes=0-99999999999999999999", 10)).toEqual({ start: 0, end: 9 });
+    expect(parseRange("bytes=99999999999999999999-", 10)).toBe("unsatisfiable");
+    expect(parseRange("BYTES=1-2", 10)).toEqual({ start: 1, end: 2 });
+    expect(parseRange("bytes=-1", 0)).toBe("unsatisfiable");
+  });
+});
+
+// ---- wind field ----
+
+describe("/data/wind.json", () => {
+  it("sends a fresh field with the edge cache rule", async () => {
+    const snapshot = await freshSnapshot();
+    const base = await serve({ snapshot });
+    const res = await get(base, "/data/wind.json");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, s-maxage=120");
+    expect(res.headers.has("set-cookie")).toBe(false);
+    const body = await res.text();
+    expect(body).toBe(toWindJson(windView(snapshot.wind, NOW)));
+    expect(JSON.parse(body)).toMatchObject({ state: "fresh", asOf: NOW });
+  });
+
+  it("sends a stale field with no-store", async () => {
+    const snapshot = await freshSnapshot();
+    const later = NOW + WIND_STALE_AFTER_MS;
+    const base = await serve({ snapshot, now: later });
+    const res = await get(base, "/data/wind.json");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const body = await res.text();
+    expect(body).toBe(toWindJson(windView(snapshot.wind, later)));
+    expect(JSON.parse(body)).toMatchObject({ state: "stale", asOf: NOW });
+  });
+
+  it("sends the missing state with no-store when the grid never loaded", async () => {
+    const base = await serve({ snapshot: emptySnapshot() });
+    const res = await get(base, "/data/wind.json");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ state: "missing" });
+  });
+
+  it("does not depend on the map files", async () => {
+    const base = await serve({ assets });
+    expect((await get(base, "/data/wind.json")).status).toBe(200);
+  });
+
+  it("compresses the field per request", async () => {
+    const base = await serve();
+    const res = await raw(base, "/data/wind.json", { encoding: "br" });
+    expect(res.headers["content-encoding"]).toBe("br");
+    expect(res.headers["vary"]).toBe("Accept-Encoding");
+    expect(JSON.parse(brotliDecompressSync(res.body).toString())).toMatchObject({ state: "fresh" });
+  });
+
+  it("answers HEAD with no body", async () => {
+    const base = await serve();
+    const head = await raw(base, "/data/wind.json", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.body.length).toBe(0);
+  });
+
+  it("redirects a query string to the plain path and 404s other paths", async () => {
+    const base = await serve();
+    const res = await get(base, "/data/wind.json?t=1");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("/data/wind.json");
+    expect((await get(base, "/data/wind.json/")).status).toBe(404);
+    expect((await get(base, "/data/")).status).toBe(404);
+    expect((await get(base, "/data/other.json")).status).toBe(404);
+  });
+});
+
 // ---- real startup path ----
 
 describe("startServer", () => {
@@ -547,6 +843,58 @@ describe("startServer", () => {
     await running.stop();
     open.pop();
     await expect(fetch(`${base}/healthz`)).rejects.toThrow();
+  });
+
+  it("starts without the map when a map file is missing, logging one line", async () => {
+    const lines: string[] = [];
+    const port = await freePort();
+    const dir = makeAssetDir();
+    writeMapGroup(dir, join(dir, "data"));
+    rmSync(join(dir, "map/basemap.pmtiles"));
+    const running = await startServer({
+      env: { PORT: String(port), VERDICT_LOG_DIR: join(dir, "log") },
+      assetsDir: dir,
+      mapDataDir: join(dir, "data"),
+      now: () => NOW,
+      fetchImpl: fakeFetch(goodRoutes),
+      log: (l) => lines.push(l),
+    });
+    open.push(running.server);
+    const mapLines = lines.filter((l) => l.startsWith("[assets]"));
+    expect(mapLines).toHaveLength(1);
+    expect(mapLines[0]).toContain("basemap.pmtiles");
+
+    const base = `http://127.0.0.1:${port}`;
+    expect((await get(base, "/")).status).toBe(200);
+    expect((await get(base, "/week")).status).toBe(200);
+    expect((await get(base, "/map")).status).toBe(503);
+    await running.stop();
+    open.pop();
+  });
+
+  it("serves the map and the wind field when every map file is there", async () => {
+    const lines: string[] = [];
+    const port = await freePort();
+    const dir = makeAssetDir();
+    writeMapGroup(dir, join(dir, "data"));
+    const running = await startServer({
+      env: { PORT: String(port), VERDICT_LOG_DIR: join(dir, "log") },
+      assetsDir: dir,
+      mapDataDir: join(dir, "data"),
+      now: () => NOW,
+      fetchImpl: fakeFetch(goodRoutes),
+      log: (l) => lines.push(l),
+    });
+    open.push(running.server);
+    expect(lines.filter((l) => l.startsWith("[assets]"))).toEqual([]);
+    const base = `http://127.0.0.1:${port}`;
+    const map = await get(base, "/map");
+    expect(map.status).toBe(200);
+    expect(map.headers.get("content-security-policy")).toBe(MAP_CSP);
+    // The wind grid is not awaited at start, so it may still be loading.
+    expect((await get(base, "/data/wind.json")).status).toBe(200);
+    await running.stop();
+    open.pop();
   });
 
   it("refuses to start with a bad setting", async () => {

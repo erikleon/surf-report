@@ -4,9 +4,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
 import { promisify } from "node:util";
-import type { Assets } from "./assets.js";
+import { WIND_URL, type Asset, type Assets } from "./assets.js";
 import type { Cache } from "./cache.js";
 import { buildModel, type SiteModel } from "./model.js";
+import { toWindJson, windView } from "./windField.js";
 import * as defaultPages from "./pages/index.js";
 import type { PageContext } from "./pages/index.js";
 
@@ -18,6 +19,7 @@ export interface Pages {
   renderHome(model: SiteModel, ctx: PageContext): string;
   renderWeek(model: SiteModel, ctx: PageContext): string;
   renderAbout(model: SiteModel, ctx: PageContext): string;
+  renderMap(model: SiteModel, ctx: PageContext): string;
   renderNotFound(ctx: PageContext): string;
   renderUnavailable(ctx: PageContext): string;
 }
@@ -37,6 +39,12 @@ export interface AppDeps {
 const CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; " +
   "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+// The map page only. MapLibre starts a same-origin module worker, and its
+// raster image decoder falls back to blob: image URLs.
+const MAP_CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; " +
+  "connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 const CACHE_PAGE = "public, max-age=0, s-maxage=120";
 const CACHE_ASSET = "public, max-age=31536000, immutable";
@@ -59,6 +67,8 @@ interface Reply {
   encodings?: Record<string, Buffer>;
   /** Compress `body` on the fly when the client accepts it. */
   compress?: boolean;
+  /** Replaces the site-wide Content-Security-Policy. */
+  csp?: string;
 }
 
 /** Content codings the client accepts, from Accept-Encoding, with q=0 meaning "not accepted". */
@@ -86,7 +96,7 @@ async function send(req: IncomingMessage, res: ServerResponse, reply: Reply): Pr
   const headers: Headers = {
     "Content-Type": reply.type,
     "Cache-Control": reply.cache,
-    "Content-Security-Policy": CSP,
+    "Content-Security-Policy": reply.csp ?? CSP,
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     ...reply.extra,
@@ -118,6 +128,60 @@ async function send(req: IncomingMessage, res: ServerResponse, reply: Reply): Pr
   res.end(req.method === "HEAD" ? undefined : body);
 }
 
+type ByteRange = { start: number; end: number } | "unsatisfiable" | undefined;
+
+/**
+ * The one byte range a Range header asks for, inclusive at both ends.
+ * Undefined means "send the whole file": no header, another unit, a header
+ * that does not parse, or more than one range. Answering a multi-range
+ * request with the whole file is allowed and saves building a multipart body.
+ */
+export function parseRange(header: string | undefined, size: number): ByteRange {
+  if (header === undefined) return undefined;
+  const match = /^bytes=[ \t]*(\d*)-(\d*)[ \t]*$/i.exec(header.trim());
+  if (match === null) return undefined;
+  const [, first = "", last = ""] = match;
+  if (first === "" && last === "") return undefined;
+  if (first === "") {
+    // A suffix range: the last n bytes.
+    const length = Number(last);
+    if (length === 0 || size === 0) return "unsatisfiable";
+    return { start: Math.max(0, size - length), end: size - 1 };
+  }
+  const start = Number(first);
+  if (last !== "" && Number(last) < start) return undefined;
+  if (start >= size) return "unsatisfiable";
+  return { start, end: last === "" ? size - 1 : Math.min(Number(last), size - 1) };
+}
+
+function assetReply(req: IncomingMessage, asset: Asset): Reply {
+  if (asset.ranges !== true) {
+    return { status: 200, type: asset.type, cache: CACHE_ASSET, body: asset.body, encodings: asset.encodings };
+  }
+  // Never compressed: the reader's byte offsets point into the file as it is on disk.
+  const size = asset.body.length;
+  const range = parseRange(req.headers.range, size);
+  if (range === "unsatisfiable") {
+    return {
+      status: 416,
+      type: "text/plain; charset=utf-8",
+      cache: NO_STORE,
+      body: "",
+      extra: { "Accept-Ranges": "bytes", "Content-Range": `bytes */${size}` },
+    };
+  }
+  if (range === undefined) {
+    return { status: 200, type: asset.type, cache: CACHE_ASSET, body: asset.body, extra: { "Accept-Ranges": "bytes" } };
+  }
+  return {
+    status: 206,
+    type: asset.type,
+    cache: CACHE_ASSET,
+    body: asset.body.subarray(range.start, range.end + 1),
+    extra: { "Accept-Ranges": "bytes", "Content-Range": `bytes ${range.start}-${range.end}/${size}` },
+  };
+}
+
 function redirect(to: string): Reply {
   return { status: 301, type: "text/plain; charset=utf-8", cache: NO_STORE, body: "", extra: { Location: to } };
 }
@@ -130,6 +194,7 @@ export function createApp(deps: AppDeps): Server {
     "/": (m, c) => pages.renderHome(m, c),
     "/week": (m, c) => pages.renderWeek(m, c),
     "/about": (m, c) => pages.renderAbout(m, c),
+    "/map": (m, c) => pages.renderMap(m, c),
   };
 
   function context(): PageContext {
@@ -166,7 +231,20 @@ export function createApp(deps: AppDeps): Server {
     if (pathname.startsWith("/assets/")) {
       const asset = deps.assets.lookup(pathname);
       if (asset === undefined) return notFound();
-      return { status: 200, type: asset.type, cache: CACHE_ASSET, body: asset.body, encodings: asset.encodings };
+      return assetReply(req, asset);
+    }
+
+    if (pathname === WIND_URL) {
+      // A query string would let a client skip the edge cache.
+      if (hasQuery) return redirect(WIND_URL);
+      const view = windView(deps.cache.snapshot().wind, deps.now());
+      return {
+        status: 200,
+        type: "application/json; charset=utf-8",
+        cache: view.state === "fresh" ? CACHE_PAGE : NO_STORE,
+        body: toWindJson(view),
+        compress: true,
+      };
     }
 
     // A page URL with a trailing slash or a query string is sent to the plain
@@ -177,22 +255,29 @@ export function createApp(deps: AppDeps): Server {
     if (plain !== pathname || hasQuery) return redirect(plain);
 
     const ctx = context();
+    // The forecast pages never depend on the map files; only /map does.
+    if (plain === "/map" && ctx.assets.map === undefined) return unavailable(ctx);
     const model = buildModel(deps.cache.snapshot(), ctx.nowMs);
     if (model.marineState === "missing" && model.forecastState === "missing" && model.tideState === "missing") {
-      return {
-        status: 503,
-        type: HTML_TYPE,
-        cache: NO_STORE,
-        body: pages.renderUnavailable(ctx),
-        extra: { "Retry-After": "30" },
-        compress: true,
-      };
+      return unavailable(ctx);
     }
     return {
       status: 200,
       type: HTML_TYPE,
       cache: model.cacheable ? CACHE_PAGE : NO_STORE,
       body: render(model, ctx),
+      compress: true,
+      ...(plain === "/map" ? { csp: MAP_CSP } : {}),
+    };
+  }
+
+  function unavailable(ctx: PageContext): Reply {
+    return {
+      status: 503,
+      type: HTML_TYPE,
+      cache: NO_STORE,
+      body: pages.renderUnavailable(ctx),
+      extra: { "Retry-After": "30" },
       compress: true,
     };
   }
