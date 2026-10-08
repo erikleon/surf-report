@@ -26,8 +26,11 @@ test.describe("map page", () => {
     expect(res?.status()).toBe(200);
     await page.locator(".map.map-ready").waitFor(READY);
     await settle(page);
-    // The static fallback is hidden once the interactive map has rendered.
-    await expect(page.locator(".map-fallback")).toBeHidden();
+    // The static map stays visible, with the live map below it.
+    await expect(page.locator(".map-fallback")).toBeVisible();
+    const above = await page.locator(".map-fallback").boundingBox();
+    const below = await page.locator(".map-canvas").boundingBox();
+    expect(below?.y ?? 0).toBeGreaterThan((above?.y ?? 0) + (above?.height ?? 0) - 1);
     await expect(page.locator(".map-canvas canvas").first()).toBeVisible();
     expect(problems).toEqual([]);
   });

@@ -1,6 +1,6 @@
 // The map page: the nearshore map, the wind now, what the map shows and where
-// its data comes from. Without JavaScript, or until the interactive map has
-// drawn, the static SVG is the map. The markup of the map section is a
+// its data comes from. The static SVG is always shown; the interactive
+// map loads below it. The markup of the map section is a
 // contract with assets/map.js; see "Map page and client contract" in the plan
 // and docs/map-client.md.
 
@@ -60,13 +60,13 @@ function mapSection(m: MapAssets): string {
   const attrs = data.map(([k, v]) => ` data-${k}="${escapeHtml(v)}"`).join("");
   return (
     `<section class="map" aria-label="Rockaway nearshore map">` +
-    `<div class="map-canvas" id="map-canvas"${attrs}></div>` +
     `<figure class="map-fallback">` +
     `<div class="map-scroll" tabindex="0" role="region" aria-label="Static map, scrolls sideways on a small screen">` +
     `<img src="${escapeHtml(m.staticSvg)}" alt="${escapeHtml(altText())}" width="${facts.width}" height="${facts.height}">` +
     `</div>` +
     `<figcaption>${escapeHtml(CAPTION)}</figcaption>` +
     `</figure>` +
+    `<div class="map-canvas" id="map-canvas"${attrs}></div>` +
     `<p class="map-credit">${ATTRIBUTION}</p>` +
     `</section>`
   );

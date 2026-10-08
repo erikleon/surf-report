@@ -1,11 +1,13 @@
 /*
  * The interactive map on /map.
  *
- * The page already shows a static map. This script loads MapLibre, draws the
- * basemap with our depth contours, land outline and shore features on top,
- * and adds the wind layer. Only when the map has rendered does it add
- * `map-ready`, which hides the static map. If anything needed is missing it
- * says why in `.map-status` and leaves the static map in place.
+ * The page already shows a static map, and it stays on screen. This script
+ * loads MapLibre, draws the basemap with our depth contours, land outline and
+ * shore features on top, and adds the wind layer below the static map. While
+ * that loads, `map-loading` is set on the section and `.map-status` says so.
+ * When the map has rendered, `map-loading` gives way to `map-ready` and the
+ * live map shows. If anything needed is missing, or the map does not load, it
+ * says why in `.map-status`.
  *
  * Wind state (fresh, stale or missing) and the current hour come from the
  * server. The hour slider only selects among the hours the server sent.
@@ -34,6 +36,10 @@ const COLORS = {
 
 const FONT = ["Noto Sans Regular"];
 const NEEDED = ["styleLight", "styleDark", "maplibre", "bathymetry", "land", "shore", "wind", "bounds"];
+
+/** How long the live map gets to draw before the page reports that it did not. */
+const LOAD_TIMEOUT_MS = 20000;
+const LOADING_TEXT = "Loading interactive map\u2026";
 
 const section = document.querySelector(".map");
 const container = section && section.querySelector(".map-canvas");
@@ -250,13 +256,28 @@ async function start() {
   }
   container.setAttribute("role", "region");
   container.setAttribute("aria-label", "Interactive map of Rockaway Beach, depth contours and wind");
+  section.classList.add("map-loading");
+  status(LOADING_TEXT);
+
+  /** Gives up on the live map: the static map above stays, and the reason shows below it. */
+  let settled = false;
+  let map;
+  function fail(text, err) {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    if (err) console.error("map:", err);
+    section.classList.remove("map-loading");
+    if (map) map.remove();
+    status(text);
+  }
+  const timer = setTimeout(() => fail("Interactive map did not load. The static map above is still current."), LOAD_TIMEOUT_MS);
 
   const darkQuery = matchMedia("(prefers-color-scheme: dark)");
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const mode = () => (darkQuery.matches ? "dark" : "light");
   const styleUrl = () => abs(mode() === "dark" ? data.styleDark : data.styleLight);
 
-  let map;
   try {
     const moduleUrl = abs(data.maplibre);
     const mod = await import(moduleUrl);
@@ -286,15 +307,29 @@ async function start() {
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
   } catch (err) {
-    console.error("map: could not start MapLibre", err);
     const noGL = /webgl/i.test(String(err && err.message));
-    status("Interactive map unavailable: " + (noGL ? "this browser cannot use WebGL2." : "the map code did not load."));
+    fail("Interactive map unavailable: " + (noGL ? "this browser cannot use WebGL2." : "the map code did not load."), err);
     return;
   }
 
-  map.on("error", (ev) => console.error("map:", ev && ev.error));
-  map.on("style.load", () => addOverlays(map, COLORS[mode()]));
-  map.once("idle", () => section.classList.add("map-ready"));
+  let styleLoaded = false;
+  map.on("error", (ev) => {
+    console.error("map:", ev && ev.error);
+    // A failed style or map-wide error leaves nothing to draw; a single missing tile does not.
+    if (!styleLoaded && !settled) fail("Interactive map unavailable: the map style did not load.");
+  });
+  map.on("style.load", () => {
+    styleLoaded = true;
+    addOverlays(map, COLORS[mode()]);
+  });
+  map.once("idle", () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    section.classList.replace("map-loading", "map-ready");
+    const note = section.querySelector(".map-status");
+    if (note && note.textContent === LOADING_TEXT) note.remove();
+  });
 
   let wind = null;
   darkQuery.addEventListener("change", () => {
@@ -316,5 +351,6 @@ async function start() {
 
 start().catch((err) => {
   console.error("map: setup failed", err);
+  section.classList.remove("map-loading");
   status("Interactive map unavailable.");
 });
