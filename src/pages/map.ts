@@ -1,6 +1,7 @@
 // The map page: the nearshore map, the wind now, what the map shows and where
-// its data comes from. The static SVG is always shown; the interactive
-// map loads below it. The markup of the map section is a
+// its data comes from. The interactive map comes first and the static SVG
+// sits below it, the part of the page that matters least. The static map is
+// the only map without JavaScript or when the interactive one fails to load. The markup of the map section is a
 // contract with assets/map.js; see "Map page and client contract" in the plan
 // and docs/map-client.md.
 
@@ -46,7 +47,20 @@ function altText(): string {
   );
 }
 
-function mapSection(m: MapAssets): string {
+/** The stylesheet and scripts a page with the map section needs in its head. */
+export function mapHead(m: MapAssets): string {
+  return (
+    `<link rel="stylesheet" href="${escapeHtml(m.maplibreCss)}">` +
+    `<script src="${escapeHtml(m.pmtiles)}" defer></script>` +
+    `<script type="module" src="${escapeHtml(m.client)}"></script>`
+  );
+}
+
+/**
+ * The live map, then the static map below it. With `day` set, the wind slider
+ * covers only that New York date.
+ */
+export function mapSection(m: MapAssets, day?: string): string {
   const data: Array<[string, string]> = [
     ["style-light", m.styleLight],
     ["style-dark", m.styleDark],
@@ -56,17 +70,18 @@ function mapSection(m: MapAssets): string {
     ["shore", m.shore],
     ["wind", m.wind],
     ["bounds", facts.bounds.join(",")],
+    ...(day !== undefined ? ([["day", day]] as Array<[string, string]>) : []),
   ];
   const attrs = data.map(([k, v]) => ` data-${k}="${escapeHtml(v)}"`).join("");
   return (
     `<section class="map" aria-label="Rockaway nearshore map">` +
+    `<div class="map-canvas" id="map-canvas"${attrs}></div>` +
     `<figure class="map-fallback">` +
     `<div class="map-scroll" tabindex="0" role="region" aria-label="Static map, scrolls sideways on a small screen">` +
     `<img src="${escapeHtml(m.staticSvg)}" alt="${escapeHtml(altText())}" width="${facts.width}" height="${facts.height}">` +
     `</div>` +
     `<figcaption>${escapeHtml(CAPTION)}</figcaption>` +
     `</figure>` +
-    `<div class="map-canvas" id="map-canvas"${attrs}></div>` +
     `<p class="map-credit">${ATTRIBUTION}</p>` +
     `</section>`
   );
@@ -139,12 +154,7 @@ function sourcesSection(): string {
 
 export function renderMap(model: SiteModel, ctx: PageContext): string {
   const m = ctx.assets.map;
-  const head =
-    m === undefined
-      ? ""
-      : `<link rel="stylesheet" href="${escapeHtml(m.maplibreCss)}">` +
-        `<script src="${escapeHtml(m.pmtiles)}" defer></script>` +
-        `<script type="module" src="${escapeHtml(m.client)}"></script>`;
+  const head = m === undefined ? "" : mapHead(m);
   const body =
     `<h1 class="page-title">Nearshore map</h1>` +
     `<p class="lede">The bottom off Rockaway from the tip of Breezy Point to about Beach 35th Street: depth lines, jetties, the boardwalk and street ends. ` +

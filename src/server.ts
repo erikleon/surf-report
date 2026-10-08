@@ -20,6 +20,8 @@ export interface Pages {
   renderWeek(model: SiteModel, ctx: PageContext): string;
   renderAbout(model: SiteModel, ctx: PageContext): string;
   renderMap(model: SiteModel, ctx: PageContext): string;
+  /** Undefined when the forecast has no hours on that date. */
+  renderDay(model: SiteModel, ctx: PageContext, date: string): string | undefined;
   renderNotFound(ctx: PageContext): string;
   renderUnavailable(ctx: PageContext): string;
 }
@@ -194,7 +196,7 @@ export function createApp(deps: AppDeps): Server {
   const pages = deps.pages ?? defaultPages;
   const log = deps.log ?? ((line: string) => void process.stderr.write(`${line}\n`));
 
-  const pageRoutes: Record<string, (model: SiteModel, ctx: PageContext) => string> = {
+  const pageRoutes: Record<string, (model: SiteModel, ctx: PageContext) => string | undefined> = {
     "/": (m, c) => pages.renderHome(m, c),
     "/week": (m, c) => pages.renderWeek(m, c),
     "/about": (m, c) => pages.renderAbout(m, c),
@@ -254,7 +256,13 @@ export function createApp(deps: AppDeps): Server {
     // A page URL with a trailing slash or a query string is sent to the plain
     // path, so cache-busting URLs cannot get around the edge cache.
     const plain = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
-    const render = Object.hasOwn(pageRoutes, plain) ? pageRoutes[plain] : undefined;
+    const dayDate = /^\/day\/(\d{4}-\d{2}-\d{2})$/.exec(plain)?.[1];
+    const render =
+      dayDate !== undefined
+        ? (m: SiteModel, c: PageContext) => pages.renderDay(m, c, dayDate)
+        : Object.hasOwn(pageRoutes, plain)
+          ? pageRoutes[plain]
+          : undefined;
     if (render === undefined) return notFound();
     if (plain !== pathname || hasQuery) return redirect(plain);
 
@@ -265,13 +273,16 @@ export function createApp(deps: AppDeps): Server {
     if (model.marineState === "missing" && model.forecastState === "missing" && model.tideState === "missing") {
       return unavailable(ctx);
     }
+    const body = render(model, ctx);
+    if (body === undefined) return notFound();
     return {
       status: 200,
       type: HTML_TYPE,
       cache: model.cacheable ? CACHE_PAGE : NO_STORE,
-      body: render(model, ctx),
+      body,
       compress: true,
-      ...(plain === "/map" ? { csp: MAP_CSP } : {}),
+      // The day page carries the map when the map files exist.
+      ...(plain === "/map" || (dayDate !== undefined && ctx.assets.map !== undefined) ? { csp: MAP_CSP } : {}),
     };
   }
 

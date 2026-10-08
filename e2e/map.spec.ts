@@ -26,11 +26,11 @@ test.describe("map page", () => {
     expect(res?.status()).toBe(200);
     await page.locator(".map.map-ready").waitFor(READY);
     await settle(page);
-    // The static map stays visible, with the live map below it.
+    // The static map stays visible, below the live map.
     await expect(page.locator(".map-fallback")).toBeVisible();
-    const above = await page.locator(".map-fallback").boundingBox();
-    const below = await page.locator(".map-canvas").boundingBox();
-    expect(below?.y ?? 0).toBeGreaterThan((above?.y ?? 0) + (above?.height ?? 0) - 1);
+    const live = await page.locator(".map-canvas").boundingBox();
+    const still = await page.locator(".map-fallback").boundingBox();
+    expect(still?.y ?? 0).toBeGreaterThan((live?.y ?? 0) + (live?.height ?? 0) - 1);
     await expect(page.locator(".map-canvas canvas").first()).toBeVisible();
     expect(problems).toEqual([]);
   });
@@ -90,5 +90,23 @@ test.describe("map page", () => {
       expect(colours.group).toBe(colours.body);
       expect(colours.shadow).toBe("none");
     });
+  });
+
+  test("a day page opens from the week page and limits the wind slider to that day", async ({ page }) => {
+    await page.goto("/week");
+    const link = page.locator(".day h2 a").nth(1);
+    const href = await link.getAttribute("href");
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`${href}$`));
+    await expect(page.locator(".timeline svg.chart")).toBeVisible();
+    await expect(page.locator("table.week tbody tr").first()).toBeVisible();
+    await page.locator(".map.map-ready").waitFor(READY);
+    const date = href?.split("/").pop() ?? "";
+    const label = page.locator(".wind-label");
+    await expect(label).toBeVisible();
+    const min = Number(await page.locator(".wind-hour").getAttribute("min"));
+    const max = Number(await page.locator(".wind-hour").getAttribute("max"));
+    expect(max - min).toBeLessThanOrEqual(24);
+    expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

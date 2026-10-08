@@ -1231,3 +1231,22 @@ p.empty {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Day page ---- */
+
+.daynav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-xs) var(--s-md);
+  margin-top: var(--s-md);
+  font-size: 14px;
+}
+
+.day-call {
+  margin-top: var(--s-sm);
+  font-size: 20px;
+}
+
+.week-days .day h2 a {
+  color: inherit;
+}

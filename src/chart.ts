@@ -337,9 +337,11 @@ export function surfFrames(
   nowStamp: string,
   daylight?: Daylight,
   tide?: TideSeries,
+  /** False when the window starts at midnight rather than at the current hour. */
+  firstIsNow = true,
 ): ScrubFrame[] {
   return hours.map((h, i) => {
-    const when = i === 0 ? "Now" : dayLabel(h.time, nowStamp);
+    const when = i === 0 && firstIsNow ? "Now" : dayLabel(h.time, nowStamp);
     const time = timeLabel(h.time);
     const call = hourCall(h, daylight);
     if (h.kind === "gap") {

@@ -40,7 +40,7 @@ function frameText(f: ScrubFrame): string {
  * The output has no inline script or style, so the page can send a strict
  * content security policy.
  */
-export function renderScrub(frames: ScrubFrame[], chart: string): string {
+export function renderScrub(frames: ScrubFrame[], chart: string, backLabel = "Now"): string {
   const cell = (c: ScrubCell): string =>
     `<div class="ro-cell"><span class="ro-k">${escapeHtml(c.k)}</span>` +
     `<span class="ro-v${c.cls ? ` v-${escapeHtml(c.cls)}` : ""}">${escapeHtml(c.v)}</span></div>`;
@@ -54,7 +54,7 @@ export function renderScrub(frames: ScrubFrame[], chart: string): string {
       // The way back is part of every frame but the first, so returning to now
       // needs no state on the client and survives JS being off. It sits on the
       // top row at the right hand end, beside the verdict where there is one.
-      const back = i === 0 ? "" : `<button type="button" class="nowbtn">Now</button>`;
+      const back = i === 0 ? "" : `<button type="button" class="nowbtn">${escapeHtml(backLabel)}</button>`;
       const note = f.note ? `<div class="ro-why">${escapeHtml(f.note)}</div>` : "";
       return (
         `<div class="ro-frame"${i === 0 ? "" : " hidden"}>` +

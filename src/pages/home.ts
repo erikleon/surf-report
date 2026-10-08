@@ -134,21 +134,28 @@ function nowStrip(model: SiteModel): string {
 // ---- The chart ----
 
 function chartBlock(model: SiteModel): string {
-  const window = fromNow(model.hours, model.nowStamp);
+  return timelineBlock(model, fromNow(model.hours, model.nowStamp), "Next 48 hours");
+}
+
+/**
+ * The readout, chart and slider for a window of hours. The window starts at
+ * the current hour on the home page; the day page passes a calendar day.
+ */
+export function timelineBlock(model: SiteModel, window: Hour[], heading: string, fromMidnight = false): string {
   const chart = renderSurfChart(window, model.nowStamp, model.daylight, model.tide);
   // With the call hidden, the readout must not show a per-hour verdict either.
   const hideCall = model.callState !== "ok";
-  const frames = surfFrames(window, model.nowStamp, model.daylight, model.tide).map((f) => {
+  const frames = surfFrames(window, model.nowStamp, model.daylight, model.tide, !fromMidnight).map((f) => {
     if (!hideCall) return f;
     const { verdict: _verdict, note: _note, ...raw } = f;
     return raw;
   });
-  const body = window.length >= 2 ? renderScrub(frames, chart) : chart;
+  const body = window.length >= 2 ? renderScrub(frames, chart, fromMidnight ? "Start of day" : "Now") : chart;
   const old =
     (model.marineState === "stale" || model.forecastState === "stale") && model.callAsOf !== undefined
       ? `<p class="stale-note stale"><span class="stale-sq" aria-hidden="true"></span>Forecast data is from ${clock(model.callAsOf)}.</p>`
       : "";
-  return `<section aria-labelledby="h-chart"><h2 id="h-chart" class="label">Next 48 hours</h2>${old}` +
+  return `<section aria-labelledby="h-chart"><h2 id="h-chart" class="label">${escapeHtml(heading)}</h2>${old}` +
     `<div class="${hideCall ? "nocall" : "withcall"}">${body}</div></section>`;
 }
 

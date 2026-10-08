@@ -150,6 +150,7 @@ const bigPages = (size: number): Pages => {
     renderWeek: () => html,
     renderAbout: () => html,
     renderMap: () => html,
+    renderDay: () => html,
     renderNotFound: () => html,
     renderUnavailable: () => html,
   };
@@ -506,6 +507,42 @@ describe("page compression", () => {
     expect(head.headers["content-encoding"]).toBe("br");
     expect(head.headers["content-length"]).toBe(String(getRes.body.length));
     expect(head.body.length).toBe(0);
+  });
+});
+
+// ---- day pages ----
+
+describe("day pages", () => {
+  it("serves /day/<date> from renderDay with the date", async () => {
+    const seen: string[] = [];
+    const pages: Pages = {
+      ...bigPages(1),
+      renderDay: (_m, _c, date) => {
+        seen.push(date);
+        return "<p>day</p>";
+      },
+    };
+    const base = await serve({ pages });
+    const res = await get(base, "/day/2026-09-05");
+    expect(res.status).toBe(200);
+    expect(seen).toEqual(["2026-09-05"]);
+  });
+
+  it("answers 404 when the renderer has no such day", async () => {
+    const base = await serve({ pages: { ...bigPages(1), renderDay: () => undefined } });
+    expect((await get(base, "/day/2030-01-01")).status).toBe(404);
+  });
+
+  it("answers 404 for a path that is not a date", async () => {
+    const base = await serve({ pages: bigPages(1) });
+    expect((await get(base, "/day/tomorrow")).status).toBe(404);
+  });
+
+  it("redirects a trailing slash or query to the plain path", async () => {
+    const base = await serve({ pages: bigPages(1) });
+    const res = await get(base, "/day/2026-09-05/?x=1");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("/day/2026-09-05");
   });
 });
 

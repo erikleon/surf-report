@@ -44,7 +44,7 @@ describe.each(files)("assets/$name", ({ name, path, source }) => {
   });
 
   it("stays inside its size budget", () => {
-    const budget = name === "map.js" ? 12 * 1024 : 8 * 1024;
+    const budget = name === "map.js" ? 14 * 1024 : 8 * 1024;
     expect(statSync(path).size).toBeLessThan(budget);
   });
 });

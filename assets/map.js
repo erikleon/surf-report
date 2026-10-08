@@ -204,7 +204,20 @@ async function addWind(map, mode, reducedMotion) {
     return null;
   }
   const stale = wind.state === "stale";
-  const first = Number.isInteger(wind.hourIndex) ? wind.hourIndex : 0;
+  // A day page limits the slider to that New York date's hours.
+  let lo = Number.isInteger(wind.hourIndex) ? wind.hourIndex : 0;
+  let hi = wind.times.length - 1;
+  if (container.dataset.day) {
+    const inDay = wind.times.flatMap((t, i) => (t.startsWith(container.dataset.day) ? [i] : []));
+    if (!inDay.length) {
+      status("The wind forecast does not cover this day.");
+      return null;
+    }
+    lo = inDay[0];
+    hi = inDay[inDay.length - 1];
+  }
+  const now = Number.isInteger(wind.hourIndex) ? wind.hourIndex : lo;
+  const first = now >= lo && now <= hi ? now : lo;
 
   const controls = document.createElement("div");
   controls.className = "wind-controls";
@@ -216,8 +229,8 @@ async function addWind(map, mode, reducedMotion) {
   range.type = "range";
   range.className = "wind-hour";
   range.id = id;
-  range.min = String(first);
-  range.max = String(wind.times.length - 1);
+  range.min = String(lo);
+  range.max = String(hi);
   range.step = "1";
   range.value = String(first);
   const out = document.createElement("p");

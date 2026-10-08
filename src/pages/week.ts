@@ -39,7 +39,7 @@ export function weekBlocks(hours: Hour[], nowStamp: string): Array<{ date: strin
   return [...days.entries()].map(([date, blocks]) => ({ date, blocks }));
 }
 
-function row(model: SiteModel, h: Hour, rated: boolean): string {
+export function row(model: SiteModel, h: Hour, rated: boolean): string {
   const when = escapeHtml(timeLabel(h.time));
   if (h.kind === "gap") {
     return `<tr class="gap-row"><th scope="row">${when}</th><td colspan="${rated ? 3 : 2}">No forecast</td></tr>`;
@@ -61,16 +61,24 @@ function row(model: SiteModel, h: Hour, rated: boolean): string {
 
 function daySection(model: SiteModel, date: string, blocks: Hour[], rated: boolean, today: string): string {
   const name = date === today ? "Today" : fullDayName(date);
-  const heading = `${name} <span class="date">${shortDate(date)}</span>`;
+  const heading = `<a href="/day/${date}">${name} <span class="date">${shortDate(date)}</span></a>`;
+  return (
+    `<section class="day" id="day-${date}" aria-labelledby="h-${date}">` +
+    `<h2 id="h-${date}">${heading}</h2>` +
+    hourTable(model, blocks, rated, `${fullDayName(date)} ${shortDate(date)}, three hour blocks, New York time`) +
+    `</section>`
+  );
+}
+
+/** The rows of hours as a table, one row per hour given. */
+export function hourTable(model: SiteModel, hours: Hour[], rated: boolean, caption: string): string {
   const head =
     `<tr><th scope="col">Time</th>` +
     (rated ? `<th scope="col">Rating</th>` : "") +
     `<th scope="col">Wave ft</th><th scope="col">Wind</th></tr>`;
   return (
-    `<section class="day" id="day-${date}" aria-labelledby="h-${date}">` +
-    `<h2 id="h-${date}">${heading}</h2>` +
-    `<table class="week${rated ? "" : " unrated"}"><caption class="sr">${escapeHtml(fullDayName(date))} ${shortDate(date)}, three hour blocks, New York time</caption>` +
-    `<thead>${head}</thead><tbody>${blocks.map((b) => row(model, b, rated)).join("")}</tbody></table></section>`
+    `<table class="week${rated ? "" : " unrated"}"><caption class="sr">${escapeHtml(caption)}</caption>` +
+    `<thead>${head}</thead><tbody>${hours.map((h) => row(model, h, rated)).join("")}</tbody></table>`
   );
 }
 
