@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fromNow, renderSurfChart, surfFrames } from "../src/chart.js";
+import { axisMaxFt, fromNow, renderSurfChart, surfFrames } from "../src/chart.js";
 import type { DataHour, GapHour, Hour, TideSeries } from "../src/types.js";
 
 const stamp = (i: number): string => {
@@ -414,5 +414,55 @@ describe("the tide in the surf readout", () => {
   it("gives a gap hour no tide cell either", () => {
     const hours: Hour[] = [data(0), gap(1), data(2)];
     expect(surfFrames(hours, NOW, undefined, tide)[1]?.cells).toEqual([]);
+  });
+});
+
+describe("the wave height axis", () => {
+  const axisLabels = (svg: string): string[] =>
+    [...svg.matchAll(/class="axis" text-anchor="end">(\d+)</g)].map((m) => m[1] as string);
+
+  it("tops out at 6 ft by default", () => {
+    expect(axisMaxFt(0)).toBe(6);
+    expect(axisMaxFt(3)).toBe(6);
+    expect(axisMaxFt(5.5)).toBe(6);
+  });
+
+  it("widens once a wave passes 5.5 ft", () => {
+    expect(axisMaxFt(5.6)).toBe(8);
+    expect(axisMaxFt(7.4)).toBe(10);
+  });
+
+  it("labels the default axis 2, 4 and 6", () => {
+    expect(axisLabels(renderSurfChart(base, NOW))).toEqual(["2", "4", "6"]);
+  });
+
+  it("labels a widened axis up to its new top", () => {
+    const big: Hour[] = [data(0), data(1, { waveHeight: 6.5 })];
+    expect(axisLabels(renderSurfChart(big, NOW))).toEqual(["2", "4", "6", "8"]);
+  });
+});
+
+describe("the tide line", () => {
+  const tide: TideSeries = {
+    time: ["2026-09-05T00:00", "2026-09-05T01:00", "2026-09-05T02:00"],
+    feet: [0.4, 1.5, 2.6],
+  };
+
+  it("draws a line for the hours the prediction covers", () => {
+    expect(renderSurfChart(base, NOW, sun, tide)).toContain('class="tideline"');
+  });
+
+  it("draws nothing without a tide series", () => {
+    expect(renderSurfChart(base, NOW, sun)).not.toContain("tideline");
+  });
+
+  it("pins a tide above the axis to the top of the plot", () => {
+    const high: TideSeries = { time: tide.time, feet: [9, 9, 9] };
+    const svg = renderSurfChart(base, NOW, sun, high);
+    expect(svg).not.toContain("NaN");
+    const d = svg.match(/<path d="([^"]+)" class="tideline"/)?.[1] ?? "";
+    const ys = [...d.matchAll(/[ML] [\d.]+ ([\d.]+)/g)].map((m) => m[1]);
+    expect(ys).toHaveLength(3);
+    expect(new Set(ys).size).toBe(1);
   });
 });

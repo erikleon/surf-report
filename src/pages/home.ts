@@ -135,7 +135,7 @@ function nowStrip(model: SiteModel): string {
 
 function chartBlock(model: SiteModel): string {
   const window = fromNow(model.hours, model.nowStamp);
-  const chart = renderSurfChart(window, model.nowStamp, model.daylight);
+  const chart = renderSurfChart(window, model.nowStamp, model.daylight, model.tide);
   // With the call hidden, the readout must not show a per-hour verdict either.
   const hideCall = model.callState !== "ok";
   const frames = surfFrames(window, model.nowStamp, model.daylight, model.tide).map((f) => {

@@ -749,6 +749,11 @@ p.empty {
   stroke-dasharray: 6 4;
 }
 
+.chart .tideline {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+
 .chart .bridge {
   stroke-width: 1.5;
   stroke-dasharray: 2 4;

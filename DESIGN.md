@@ -85,11 +85,13 @@ Carried over from `oneeightsix`, where each one was learned the hard way.
 - **`touch-action: pan-y` stays on the chart**, so a swipe scrolls the page instead of scrubbing.
 - **A visually hidden `<input type="range">` labelled "forecast hour" is required**, synced with the pointer scrub. It is the only keyboard and screen reader path to the timeline.
 - **The readout is pinned above the chart, never a tooltip.** A finger covers the hour it selects.
-- **At most three continuous series plus one categorical band per chart.** Everything else goes in the readout.
+- **At most three continuous series plus one categorical band per chart.** The three are wave height (area), period (dashed line) and tide (muted line). Wind is a row of arrows. Everything else goes in the readout.
+- **The wave height axis is 0 to 6 ft by default.** It widens only when a forecast wave passes 5.5 ft, to the next even foot above the tallest wave plus 10 percent. The tide shares the axis and never widens it; a tide outside the axis is pinned to the edge.
 
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-10-08 | Tide is a line on the surf chart; wave axis defaults to 6 ft | Requested by the owner. Replaces the earlier rule that kept the tide in the readout only. A fixed 6 ft default keeps small days looking small. |
 | 2026-10-03 | Initial design system created | /design-consultation, after reading the SurfCaptain page and Magicseaweed's published guide. The house Limestone system is for a private dashboard and does not fit a public ratings site. |
 | 2026-10-03 | Surfers only, no beginner layer | Keeps the page dense and fast. Swell period is assumed. |
 | 2026-10-03 | Local identity is the memorable thing | A single-beach site can do what national sites cannot. |

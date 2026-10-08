@@ -13,6 +13,7 @@
 //   night        shaded block behind the plot for dark hours
 //   nodata       shaded block behind the plot for an hour with no forecast
 //   grid         horizontal wave height rules
+//   tideline     tide height line, one per run of hours the prediction covers
 //   axis         wave height labels and the period label
 //   day          vertical rule at midnight
 //   daylabel     day name at the start of each day
@@ -42,6 +43,23 @@ import type { DataHour, Daylight, Hour, TideSeries } from "./types.js";
 
 /** The longest run of gap hours that still gets a dashed bridge. */
 const MAX_BRIDGE_HOURS = 3;
+
+/** The wave height axis tops out here unless the swell needs more room. */
+const DEFAULT_AXIS_MAX_FT = 6;
+/** A forecast wave above this widens the axis so the peak is not pinned to the top. */
+const EXPAND_ABOVE_FT = 5.5;
+/** Gridline and label spacing, in feet. */
+const AXIS_STEP_FT = 2;
+
+/**
+ * Top of the wave height axis: 6 ft, or the next even foot above the tallest
+ * wave (with 10 percent headroom) once a wave passes 5.5 ft. The tide shares
+ * this axis but never moves it.
+ */
+export function axisMaxFt(tallestWaveFt: number): number {
+  if (!(tallestWaveFt > EXPAND_ABOVE_FT)) return DEFAULT_AXIS_MAX_FT;
+  return Math.ceil((tallestWaveFt * 1.1) / AXIS_STEP_FT) * AXIS_STEP_FT;
+}
 
 /** Keep the hours from `nowStamp` forward, at most `count` of them. */
 export function fromNow(hours: Hour[], nowStamp: string, count = 48): Hour[] {
@@ -86,7 +104,12 @@ function dataAt(hours: Hour[], i: number): DataHour | undefined {
   return h?.kind === "data" ? h : undefined;
 }
 
-export function renderSurfChart(hours: Hour[], nowStamp: string, daylight?: Daylight): string {
+export function renderSurfChart(
+  hours: Hour[],
+  nowStamp: string,
+  daylight?: Daylight,
+  tide?: TideSeries,
+): string {
   const n = hours.length;
   const dataRuns = runsWhere(hours, (h) => h.kind === "data");
   if (n < 2 || dataRuns.length === 0) {
@@ -100,10 +123,32 @@ export function renderSurfChart(hours: Hour[], nowStamp: string, daylight?: Dayl
   const cellEnd = (i: number): number => (i < n - 1 ? x(i + 1) : x(i) + (x(i) - x(i - 1)));
 
   const data = hours.filter((h): h is DataHour => h.kind === "data");
-  const maxWave = Math.max(1, ...data.map((h) => h.waveHeight)) * 1.15;
+  const maxWave = axisMaxFt(Math.max(0, ...data.map((h) => h.waveHeight)));
   const maxPeriod = Math.max(1, ...data.map((h) => h.wavePeriod)) * 1.15;
   const yWave = (v: number): number => plotBottom - (v / maxWave) * PLOT_H;
   const yPeriod = (v: number): number => plotBottom - (v / maxPeriod) * PLOT_H;
+
+  // The tide on the same feet axis as the waves. NOAA predicts it whether or
+  // not the forecast has data, so gap hours still get a point. A tide above the
+  // axis or below its floor is pinned to the edge rather than widening the axis.
+  const tideByStamp = new Map<string, number>();
+  tide?.time.forEach((t, i) => {
+    const feet = tide.feet[i];
+    if (feet !== undefined) tideByStamp.set(t, feet);
+  });
+  const tideAtHour = (i: number): number | undefined => tideByStamp.get(hours[i]?.time ?? "");
+  const yTide = (v: number): number => yWave(Math.min(maxWave, Math.max(0, v)));
+  const tideLines = runsWhere(hours, (h) => tideByStamp.has(h.time))
+    .filter(([a, b]) => b > a)
+    .map(([a, b]) => {
+      const pts: string[] = [];
+      for (let i = a; i <= b; i++) {
+        const v = tideAtHour(i);
+        if (v !== undefined) pts.push(`${pts.length === 0 ? "M" : "L"} ${f1(x(i))} ${f1(yTide(v))}`);
+      }
+      return `<path d="${pts.join(" ")}" class="tideline" fill="none" />`;
+    })
+    .join("");
 
   // Wave height as an area, one closed shape per run of data hours. The eye
   // reads bulk as size, which is the point. A single isolated hour has no
@@ -216,13 +261,12 @@ export function renderSurfChart(hours: Hour[], nowStamp: string, daylight?: Dayl
     .map(({ t, i }) => `<text x="${f1(x(i))}" y="${H - 8}" class="tick">${escapeHtml(hourLabel(t))}</text>`)
     .join("");
 
-  const gridLines = [0.25, 0.5, 0.75, 1]
-    .map((f) => {
-      const v = maxWave * f;
+  const gridLines = Array.from({ length: Math.floor(maxWave / AXIS_STEP_FT) }, (_, k) => (k + 1) * AXIS_STEP_FT)
+    .map((v) => {
       const y = yWave(v);
       return (
         `<line x1="${PAD.left}" y1="${f1(y)}" x2="${W - PAD.right}" y2="${f1(y)}" class="grid" />` +
-        `<text x="${PAD.left - 6}" y="${f1(y + 3.5)}" class="axis" text-anchor="end">${v.toFixed(1)}</text>`
+        `<text x="${PAD.left - 6}" y="${f1(y + 3.5)}" class="axis" text-anchor="end">${v}</text>`
       );
     })
     .join("");
@@ -230,7 +274,7 @@ export function renderSurfChart(hours: Hour[], nowStamp: string, daylight?: Dayl
   return (
     `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" ` +
     `data-vbw="${W}" data-x0="${f1(x(0))}" data-x1="${f1(x(n - 1))}" ` +
-    `aria-label="Wave height, period, wind and the call for the next ${n} hours">` +
+    `aria-label="Wave height, period, tide, wind and the call for the next ${n} hours">` +
     nightRects(
       hours.map((h) => h.time),
       daylight,
@@ -243,6 +287,7 @@ export function renderSurfChart(hours: Hour[], nowStamp: string, daylight?: Dayl
     dayMarks +
     area +
     periodLines +
+    tideLines +
     bridges +
     band +
     `<text x="${PAD.left - 6}" y="${BAND_Y + 9}" class="bandlabel" text-anchor="end">call</text>` +
