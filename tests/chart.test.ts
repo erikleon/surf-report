@@ -456,13 +456,30 @@ describe("the tide line", () => {
     expect(renderSurfChart(base, NOW, sun)).not.toContain("tideline");
   });
 
-  it("pins a tide above the axis to the top of the plot", () => {
-    const high: TideSeries = { time: tide.time, feet: [9, 9, 9] };
-    const svg = renderSurfChart(base, NOW, sun, high);
+  it("scales the tide on its own, so a low tide still spans the panel", () => {
+    const low: TideSeries = { time: tide.time, feet: [-0.4, 0.2, 0.9] };
+    const svg = renderSurfChart(base, NOW, sun, low);
     expect(svg).not.toContain("NaN");
     const d = svg.match(/<path d="([^"]+)" class="tideline"/)?.[1] ?? "";
-    const ys = [...d.matchAll(/[ML] [\d.]+ ([\d.]+)/g)].map((m) => m[1]);
+    const ys = [...d.matchAll(/[ML] [\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]));
     expect(ys).toHaveLength(3);
-    expect(new Set(ys).size).toBe(1);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(30);
+  });
+
+  it("labels the panel with the low and high of the window", () => {
+    const labels = [...renderSurfChart(base, NOW, sun, tide).matchAll(/class="tideaxis" text-anchor="end">([-\d.]+)</g)].map((m) => m[1]);
+    expect(labels).toEqual(["2.6", "0.4"]);
+  });
+
+  it("makes room for the panel only when there is a tide", () => {
+    const height = (svg: string): number => Number(/viewBox="0 0 960 (\d+)"/.exec(svg)?.[1]);
+    expect(height(renderSurfChart(base, NOW, sun, tide))).toBeGreaterThan(height(renderSurfChart(base, NOW, sun)));
+  });
+
+  it("runs the playhead through the tide panel to the call band", () => {
+    const svg = renderSurfChart(base, NOW, sun, tide);
+    const y2 = Number(/<g class="head"><line [^>]*y2="([\d.]+)"/.exec(svg)?.[1]);
+    const tideBase = Number(/y1="([\d.]+)" x2="[\d.]+" y2="[\d.]+" class="tidebase"/.exec(svg)?.[1]);
+    expect(y2).toBeGreaterThan(tideBase);
   });
 });

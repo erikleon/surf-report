@@ -2,8 +2,8 @@
 //
 // At a beach break the tide decides whether a given swell has anything to
 // break on, so it belongs next to the wave height rather than a page away.
-// It is drawn as a line on the surf chart, on the same feet axis as the wave
-// height, and also rides in the scrub readout.
+// It is drawn as a line in its own short panel under the surf chart, on its own
+// scale, and also rides in the scrub readout.
 //
 // NOAA returns predictions rather than observations, so this keeps answering
 // when the gauge is out of the water. The fetcher has already parsed the NOAA

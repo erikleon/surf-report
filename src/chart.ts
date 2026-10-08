@@ -13,7 +13,9 @@
 //   night        shaded block behind the plot for dark hours
 //   nodata       shaded block behind the plot for an hour with no forecast
 //   grid         horizontal wave height rules
-//   tideline     tide height line, one per run of hours the prediction covers
+//   tideline     tide height line in its own panel under the plot, one per run of hours
+//   tideaxis     tide panel labels (low and high of the window, and its name)
+//   tidebase     the tide panel's baseline rule
 //   axis         wave height labels and the period label
 //   day          vertical rule at midnight
 //   daylabel     day name at the start of each day
@@ -53,8 +55,7 @@ const AXIS_STEP_FT = 2;
 
 /**
  * Top of the wave height axis: 6 ft, or the next even foot above the tallest
- * wave (with 10 percent headroom) once a wave passes 5.5 ft. The tide shares
- * this axis but never moves it.
+ * wave (with 10 percent headroom) once a wave passes 5.5 ft.
  */
 export function axisMaxFt(tallestWaveFt: number): number {
   if (!(tallestWaveFt > EXPAND_ABOVE_FT)) return DEFAULT_AXIS_MAX_FT;
@@ -70,13 +71,14 @@ export function fromNow(hours: Hour[], nowStamp: string, count = 48): Hour[] {
 }
 
 const W = 960;
-const H = 330;
+const BASE_H = 330;
 const PAD = { top: 18, right: 44, bottom: 88, left: 40 };
-const PLOT_H = H - PAD.top - PAD.bottom;
+const PLOT_H = BASE_H - PAD.top - PAD.bottom;
+/** The tide panel, when there is a tide, sits between the plot and the verdict band. */
+const TIDE_GAP = 12;
+const TIDE_H = 52;
 /** The verdict band, then the wind row, then the hour ticks. */
-const BAND_Y = PAD.top + PLOT_H + 8;
 const BAND_H = 12;
-const WIND_Y = BAND_Y + BAND_H + 20;
 
 const xAt = (i: number, n: number): number =>
   PAD.left + (n < 2 ? 0 : (i / (n - 1)) * (W - PAD.left - PAD.right));
@@ -118,6 +120,24 @@ export function renderSurfChart(
 
   const x = (i: number): number => xAt(i, n);
   const plotBottom = PAD.top + PLOT_H;
+  // The tide has its own scale, so it is judged on its own: a 0.5 ft low and
+  // a 5 ft high must both read as a clear dip and a clear rise.
+  const tideByStamp = new Map<string, number>();
+  tide?.time.forEach((t, i) => {
+    const feet = tide.feet[i];
+    if (feet !== undefined) tideByStamp.set(t, feet);
+  });
+  const tideFeet = hours.flatMap((h) => {
+    const v = tideByStamp.get(h.time);
+    return v === undefined ? [] : [v];
+  });
+  const hasTide = tideFeet.length >= 2;
+  const tideBlock = hasTide ? TIDE_GAP + TIDE_H : 0;
+  const H = BASE_H + tideBlock;
+  const tideTop = plotBottom + TIDE_GAP;
+  const tideBottom = tideTop + TIDE_H;
+  const BAND_Y = plotBottom + 8 + tideBlock;
+  const WIND_Y = BAND_Y + BAND_H + 20;
   // Cell edges for hour i: from its own x to the next hour's. The last hour
   // reuses the previous slot width so it reaches the plot edge.
   const cellEnd = (i: number): number => (i < n - 1 ? x(i + 1) : x(i) + (x(i) - x(i - 1)));
@@ -127,28 +147,6 @@ export function renderSurfChart(
   const maxPeriod = Math.max(1, ...data.map((h) => h.wavePeriod)) * 1.15;
   const yWave = (v: number): number => plotBottom - (v / maxWave) * PLOT_H;
   const yPeriod = (v: number): number => plotBottom - (v / maxPeriod) * PLOT_H;
-
-  // The tide on the same feet axis as the waves. NOAA predicts it whether or
-  // not the forecast has data, so gap hours still get a point. A tide above the
-  // axis or below its floor is pinned to the edge rather than widening the axis.
-  const tideByStamp = new Map<string, number>();
-  tide?.time.forEach((t, i) => {
-    const feet = tide.feet[i];
-    if (feet !== undefined) tideByStamp.set(t, feet);
-  });
-  const tideAtHour = (i: number): number | undefined => tideByStamp.get(hours[i]?.time ?? "");
-  const yTide = (v: number): number => yWave(Math.min(maxWave, Math.max(0, v)));
-  const tideLines = runsWhere(hours, (h) => tideByStamp.has(h.time))
-    .filter(([a, b]) => b > a)
-    .map(([a, b]) => {
-      const pts: string[] = [];
-      for (let i = a; i <= b; i++) {
-        const v = tideAtHour(i);
-        if (v !== undefined) pts.push(`${pts.length === 0 ? "M" : "L"} ${f1(x(i))} ${f1(yTide(v))}`);
-      }
-      return `<path d="${pts.join(" ")}" class="tideline" fill="none" />`;
-    })
-    .join("");
 
   // Wave height as an area, one closed shape per run of data hours. The eye
   // reads bulk as size, which is the point. A single isolated hour has no
@@ -197,6 +195,32 @@ export function renderSurfChart(
       );
     })
     .join("");
+
+  // The tide in its own short panel under the plot, drawn after the wave
+  // chart's x axis so the playhead runs straight through both. NOAA predicts
+  // the tide whether or not the forecast has data, so gap hours still get a
+  // point; the line breaks only where the prediction itself does.
+  const tideLo = Math.min(...tideFeet);
+  const tideHi = Math.max(...tideFeet);
+  const tideSpan = Math.max(0.5, tideHi - tideLo);
+  const yTide = (v: number): number => tideBottom - 4 - ((v - tideLo) / tideSpan) * (TIDE_H - 8);
+  const tidePanel = hasTide
+    ? runsWhere(hours, (h) => tideByStamp.has(h.time))
+        .filter(([a, b]) => b > a)
+        .map(([a, b]) => {
+          const pts: string[] = [];
+          for (let i = a; i <= b; i++) {
+            const v = tideByStamp.get(hours[i]?.time ?? "");
+            if (v !== undefined) pts.push(`${pts.length === 0 ? "M" : "L"} ${f1(x(i))} ${f1(yTide(v))}`);
+          }
+          return `<path d="${pts.join(" ")}" class="tideline" fill="none" />`;
+        })
+        .join("") +
+      `<line x1="${PAD.left}" y1="${tideBottom}" x2="${W - PAD.right}" y2="${tideBottom}" class="tidebase" />` +
+      `<text x="${PAD.left - 6}" y="${f1(yTide(tideHi) + 3.5)}" class="tideaxis" text-anchor="end">${tideHi.toFixed(1)}</text>` +
+      `<text x="${PAD.left - 6}" y="${f1(yTide(tideLo) + 3.5)}" class="tideaxis" text-anchor="end">${tideLo.toFixed(1)}</text>` +
+      `<text x="${W - PAD.right + 6}" y="${tideTop + 10}" class="tideaxis">tide ft</text>`
+    : "";
 
   // Ground behind the plot for each hour with no forecast, full plot height.
   const shades = hours
@@ -287,8 +311,8 @@ export function renderSurfChart(
     dayMarks +
     area +
     periodLines +
-    tideLines +
     bridges +
+    tidePanel +
     band +
     `<text x="${PAD.left - 6}" y="${BAND_Y + 9}" class="bandlabel" text-anchor="end">call</text>` +
     windMarks +
