@@ -185,7 +185,7 @@ function nextDays(model: SiteModel): string {
     const range = waveRange(model, date) ?? "No forecast";
     const rated = model.callState === "ok" && v.day === "today" && v.kind !== "none";
     rows.push(
-      `<li><a class="dayrow" href="/week#day-${date}"><span class="d-name">${fullDayName(date)}</span>` +
+      `<li><a class="dayrow" href="/day/${date}"><span class="d-name">${fullDayName(date)}</span>` +
         `<span class="d-call">${rated ? `${escapeHtml(v.word)} ${stars(v.stars, v.swellStars)}` : ""}</span>` +
         `<span class="d-wave">${escapeHtml(range)}</span></a></li>`,
     );

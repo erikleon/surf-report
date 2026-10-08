@@ -57,8 +57,8 @@ describe("home with a fresh complete snapshot", () => {
 
   it("lists three next-day rows linked to the week page", () => {
     expect(count(html, /class="dayrow"/g)).toBe(3);
-    expect(html).toContain('href="/week#day-2026-10-04"');
-    expect(html).toContain('href="/week#day-2026-10-06"');
+    expect(html).toContain('href="/day/2026-10-04"');
+    expect(html).toContain('href="/day/2026-10-06"');
     expect(html).toMatch(/Sunday/);
   });
 
@@ -163,7 +163,7 @@ describe("home after sunset", () => {
   });
 
   it("lists the three days after today", () => {
-    expect(html).toContain('href="/week#day-2026-10-04"');
+    expect(html).toContain('href="/day/2026-10-04"');
     expect(count(html, /class="dayrow"/g)).toBe(3);
   });
 });
